@@ -1,19 +1,18 @@
-import subprocess
+# -*- coding: utf-8 -*-
+from __future__ import unicode_literals
+
+import subprocess,sys
 import threading, Queue
-
-from time import sleep,time
-
-from toolbox import log
-
-class GtpException(Exception):
-	pass
+from time import sleep
+from toolbox import log,GRPException
 
 class gtp():
 	def __init__(self,command):
 		self.c=1
+		self.command_line=command[0]+" "+" ".join(command[1:])
+		command=[c.encode(sys.getfilesystemencoding()) for c in command]
 		self.process=subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 		self.size=0
-		self.command_line=command[0]+" "+" ".join(command[1:])
 		self.stderr_queue=Queue.Queue()
 		self.stdout_queue=Queue.Queue()
 		threading.Thread(target=self.consume_stderr).start()
@@ -24,20 +23,22 @@ class gtp():
 	def consume_stderr(self):
 		while 1:
 			try:
-				err_line=self.process.stderr.readline()
+				err_line=self.process.stderr.readline().decode("utf-8")
 				if err_line:
+					log("#",err_line.strip())
 					self.stderr_queue.put(err_line)
 				else:
 					log("leaving consume_stderr thread")
 					return
-			except Exception, e:
+			except Exception,e:
 				log("leaving consume_stderr thread due to exception")
+				log(e)
 				return
 	
 	def consume_stdout(self):
 		while 1:
 			try:
-				line=self.process.stdout.readline()
+				line=self.process.stdout.readline().decode("utf-8")
 				if line:
 					self.stdout_queue.put(line)
 				else:
@@ -55,14 +56,14 @@ class gtp():
 		try:
 			self.process.stdin.write(txt+"\n")
 		except Exception, e:
-			log("Error while writting to stdin\n"+str(e))
+			log("Error while writting to stdin\n"+unicode(e))
 		#self.process.stdin.write(str(self.c)+" "+txt+"\n")
 		self.c+=1
 
 	def readline(self):
-		answer=self.process.stdout.readline()
+		answer=self.process.stdout.readline().decode("utf-8")
 		while answer in ("\n","\r\n","\r"):
-			answer=self.process.stdout.readline()
+			answer=self.process.stdout.readline().decode("utf-8")
 		return answer
 	
 	####hight level function####
@@ -88,6 +89,10 @@ class gtp():
 		else:return False	
 
 	def place_black(self,move):
+		if move == "RESIGN":
+			log("WARNING: trying to play RESIGN as GTP move")
+			self.history.append(["b",move])
+			return True
 		self.write("play black "+move)
 		answer=self.readline()
 		if answer[0]=="=":
@@ -96,6 +101,10 @@ class gtp():
 		else:return False	
 	
 	def place_white(self,move):
+		if move == "RESIGN":
+			log("WARNING: trying to play RESIGN as GTP move")
+			self.history.append(["w",move])
+			return True
 		self.write("play white "+move)
 		answer=self.readline()
 		if answer[0]=="=":
@@ -108,22 +117,22 @@ class gtp():
 		self.write("genmove black")
 		answer=self.readline().strip()
 		try:
-			move=answer.split(" ")[1]
+			move=answer.split(" ")[1].upper()
 			self.history.append(["b",move])
 			return move
 		except Exception, e:
-			raise GtpException("GtpException in genmove_black()\nanswer='"+answer+"'\n"+str(e))
+			raise GRPException("GRPException in genmove_black()\nanswer='"+answer+"'\n"+unicode(e))
 
 		
 	def play_white(self):
 		self.write("genmove white")
 		answer=self.readline().strip()
 		try:
-			move=answer.split(" ")[1]
+			move=answer.split(" ")[1].upper()
 			self.history.append(["w",move])
 			return move
 		except Exception, e:
-			raise GtpException("GtpException in genmove_white()\nanswer='"+answer+"'\n"+str(e))
+			raise GRPException("GRPException in genmove_white()\nanswer='"+answer+"'\n"+unicode(e))
 
 
 	def undo(self):
@@ -145,7 +154,7 @@ class gtp():
 						return False
 			return True			
 		except Exception, e:
-			raise GtpException("GtpException in undo()\n"+str(e))
+			raise GRPException("GRPException in undo()\n"+unicode(e))
 	
 	def place(self,move,color):
 		if color==1:
@@ -159,7 +168,7 @@ class gtp():
 		try:
 			return " ".join(answer.split(" ")[1:])
 		except Exception, e:
-			raise GtpException("GtpException in name()\nanswer='"+answer+"'\n"+str(e))
+			raise GRPException("GRPException in name()\nanswer='"+answer+"'\n"+unicode(e))
 	
 	def version(self):
 		self.write("version")
@@ -167,7 +176,7 @@ class gtp():
 		try:
 			return answer.split(" ")[1]
 		except Exception,e:
-			raise GtpException("GtpException in version()\nanswer='"+answer+"'\n"+str(e))
+			raise GRPException("GRPException in version()\nanswer='"+answer+"'\n"+unicode(e))
 
 
 	def set_free_handicap(self,positions):
@@ -183,7 +192,7 @@ class gtp():
 			else:
 				return False	
 		except Exception, e:
-			raise GtpException("GtpException in set_free_handicap()\nanswer='"+answer+"'\n"+str(e))
+			raise GRPException("GRPException in set_free_handicap()\nanswer='"+answer+"'\n"+unicode(e))
 	
 	def undo_standard(self):
 		self.write("undo")
@@ -194,7 +203,7 @@ class gtp():
 			else:
 				return False			
 		except Exception, e:
-			raise GtpException("GtpException in undo()\nanswer='"+answer+"'\n"+str(e))
+			raise GRPException("GRPException in undo()\nanswer='"+answer+"'\n"+unicode(e))
 	
 	def countlib(self,move):
 		self.write("countlib "+move)
@@ -205,7 +214,7 @@ class gtp():
 	def final_score(self):
 		self.write("final_score")
 		answer=self.readline()
-		return " ".join(answer.split(" ")[1:])
+		return " ".join(answer.split(" ")[1:]).strip()
 	
 	#is that needed?
 	def final_status(self,move):
@@ -221,7 +230,7 @@ class gtp():
 			if answer[0]=="=":return True
 			else:return False
 		except Exception, e:
-			raise GtpException("GtpException in set_time()\nanswer='"+answer+"'\n"+str(e))
+			raise GRPException("GRPException in set_time()\nanswer='"+answer+"'\n"+unicode(e))
 
 	def quit(self):
 		self.write("quit")
@@ -254,7 +263,3 @@ class gtp():
 		self.quitting_thread=threading.Thread(target=self.quit)
 		self.quitting_thread.start()
 		threading.Thread(target=self.terminate).start()
-
-
-
-

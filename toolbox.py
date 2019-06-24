@@ -1,7 +1,22 @@
 # -*- coding: utf-8 -*-
+from __future__ import unicode_literals
+from traceback import format_exc
 
-class AbortedException(Exception):
-	pass
+class GRPException(Exception):
+	def __init__(self,msg):
+		if type(msg)==type(u"abc"):
+			self.utf_msg=msg
+			self.str_msg=msg.encode("utf-8",errors='replace')
+		else:
+			self.str_msg=msg
+			self.utf_msg=msg.decode("utf-8",errors='replace')
+		log("===")
+		log(format_exc())
+		log("===")
+		Exception.__init__(self,self.str_msg)
+
+	def __unicode__(self):
+		return self.utf_msg
 
 import threading
 import codecs
@@ -10,49 +25,49 @@ loglock=threading.Lock()
 def log(*args):
 	global loglock
 	loglock.acquire()
+	encoding=sys.stdout.encoding
 	for arg in args:
 		try:
-			try:
-				arg=unicode(arg,errors='replace')
-			except:
-				pass
-			try:
-				arg=arg.encode(sys.stdout.encoding, 'replace')
-			except:
-				pass
-			try:
-				print arg,
-			except:
-				print "?"*len(arg),
+			if type(arg)==type(str('abc')):
+				arg=arg.decode('utf-8',errors='replace')
+			elif type(arg)!=type(u'abc'):
+				try:
+					arg=str(arg)
+				except:
+					arg=unicode(arg,errors='replace')
+				arg=arg.decode('utf-8',errors='replace')
+			arg=arg.encode(encoding, errors='replace')
+			print arg,
 		except:
-			print "["+str(type(arg))+"]",
+			print "?"*len(arg),
 	print
 	loglock.release()
 
 def linelog(*args):
 	global loglock
 	loglock.acquire()
+	encoding=sys.stdout.encoding
 	for arg in args:
 		try:
-			try:
-				arg=unicode(arg,errors='replace')
-			except:
-				pass
-			try:
-				arg=arg.encode(sys.stdout.encoding, 'replace')
-			except:
-				pass
-			try:
-				print arg,
-			except:
-				print "?"*len(arg),
+			if type(arg)==type(str('abc')):
+				arg=arg.decode('utf-8',errors='replace')
+			elif type(arg)!=type(u'abc'):
+				try:
+					arg=str(arg)
+				except:
+					arg=unicode(arg,errors='replace')
+				arg=arg.decode('utf-8',errors='replace')
+			arg=arg.encode(encoding, errors='replace')
+			print arg,
 		except:
-			print "["+str(type(arg))+"]",
+			print "?"*len(arg),
 	loglock.release()
 
 import tkMessageBox
 
 def show_error(txt,parent=None):
+	if type(txt)==type(str('abc')):
+		txt=txt.decode('utf-8',errors='replace')
 	try:
 		tkMessageBox.showerror(_("Error"),txt,parent=parent)
 		log("ERROR: "+txt)
@@ -60,9 +75,11 @@ def show_error(txt,parent=None):
 		log("ERROR: "+txt)
 
 def show_info(txt,parent=None):
+	if type(txt)==type(str('abc')):
+		txt=txt.decode('utf-8',errors='replace')
 	try:
-		log("INFO: "+txt)
 		tkMessageBox.showinfo(_("Information"),txt,parent=parent)
+		log("INFO: "+txt)
 	except:
 		log("INFO: "+txt)
 
@@ -81,20 +98,20 @@ def go_to_move(move_zero,move_number=0):
 	k=0
 	while k!=move_number:
 		if not move:
-			log("The end of the sgf tree was reached before getting to move_number =",move_number)
-			log("Returning False")
+			log("The end of the sgf tree was reached before getting to move_number",move_number)
+			log("Could only reach move_number",k)
 			return False
 		move=move[0]
 		k+=1
 	return move
 
+
 def gtp2ij(move):
 	try:
-		#letters=['a','b','c','d','e','f','g','h','j','k','l','m','n','o','p','q','r','s','t']
-		letters="abcdefghjklmnopqrstuvwxyz"
-		return int(move[1:])-1,letters.index(move[0].lower())
+		letters="ABCDEFGHJKLMNOPQRSTUVWXYZ"
+		return int(move[1:])-1,letters.index(move[0])
 	except:
-		raise AbortedException("Cannot convert GTP coordinates "+str(move)+" to grid coordinates!")
+		raise GRPException("Cannot convert GTP coordinates "+str(move)+" to grid coordinates!")
 
 
 
@@ -105,13 +122,18 @@ def ij2gtp(m):
 		if m==None:
 			return "pass"
 		i,j=m
-		#letters=['a','b','c','d','e','f','g','h','j','k','l','m','n','o','p','q','r','s','t']
-		letters="abcdefghjklmnopqrstuvwxyz"
+		letters="ABCDEFGHJKLMNOPQRSTUVWXYZ"
 		return letters[j]+str(i+1)
 	except:
-		raise AbortedException("Cannot convert grid coordinates "+str(m)+" to GTP coordinates!")
+		raise GRPException("Cannot convert grid coordinates "+str(m)+" to GTP coordinates!")
 
-
+def sgf2ij(m):
+	# cj => 8,2
+	a, b=m
+	letters="abcdefghjklmnopqrstuvwxyz"
+	i=letters.index(b)
+	j=letters.index(a)
+	return i, j
 def ij2sgf(m):
 	# (17,0) => ???
 	try:
@@ -121,10 +143,14 @@ def ij2sgf(m):
 		letters=['a','b','c','d','e','f','g','h','j','k','l','m','n','o','p','q','r','s','t']
 		return letters[j]+letters[i]
 	except:
-		raise AbortedException("Cannot convert grid coordinates "+str(m)+" to SGF coordinates!")
+		raise GRPException("Cannot convert grid coordinates "+str(m)+" to SGF coordinates!")
 
 from gomill import sgf, sgf_moves
-from Tkinter import Tk, Label, Frame, StringVar, Radiobutton, N,W,E, Entry, END, Button, Toplevel, Listbox, OptionMenu
+
+from Tkinter import *
+#from Tix import Tk, NoteBook
+from Tkconstants import *
+
 import sys
 import os
 import urllib2
@@ -142,9 +168,9 @@ class DownloadFromURL(Toplevel):
 		self.url_entry=Entry(self)
 		self.url_entry.grid(row=2,column=1,sticky=W)
 		self.url_entry.focus()
-		
+
 		Button(self,text=_("Get"),command=self.get).grid(row=3,column=1,sticky=E)
-		
+
 		self.protocol("WM_DELETE_WINDOW", self.close)
 
 	def get(self):
@@ -164,7 +190,7 @@ class DownloadFromURL(Toplevel):
 		try:
 			h=urllib2.urlopen(r)
 		except:
-			show_error(_("Could not download the URL"),parent=self)
+			show_error(_("Could not open the URL"),parent=self)
 			return
 		filename=""
 
@@ -172,7 +198,7 @@ class DownloadFromURL(Toplevel):
 
 		if sgf[:7]!="(;FF[4]":
 			log("not a sgf file")
-			show_error(_("Not a SGF file!"),parent=self)
+			show_error(_("Not a valid SGF file!"),parent=self)
 			log(sgf[:7])
 			return
 
@@ -200,7 +226,8 @@ class DownloadFromURL(Toplevel):
 			filename+=black+'_VS_'+white+'.sgf'
 
 		log(filename)
-		write_rsgf(filename,sgf)
+		game = convert_sgf_to_utf(sgf)
+		write_rsgf(filename,game)
 
 		popup=RangeSelector(self.parent,filename,self.bots)
 		self.parent.add_popup(popup)
@@ -212,34 +239,40 @@ class DownloadFromURL(Toplevel):
 		self.destroy()
 
 
-
-class WriteException(Exception):
-	pass
-
 filelock=threading.Lock()
-
+c=0
 def write_rsgf(filename,sgf_content):
 	filelock.acquire()
+	global c
 	try:
-		log("Saving RSGF file",filename)
+		#log("Saving RSGF file",filename)
 		if type(sgf_content)==type("abc"):
 			content=sgf_content
 		else:
 			content=sgf_content.serialise()
+		filename2=filename
+		if type(filename2)==type(u"abc"):
+			if sys.getfilesystemencoding()!="mbcs":
+				filename2=filename2.encode(sys.getfilesystemencoding())
 		try:
-			new_file=open(filename,'w')
+			new_file=open(filename2,'w')
 			new_file.write(content)
 		except:
-			new_file=codecs.open(filename,"w","utf-8")
+			new_file=codecs.open(filename2,"w","utf-8")
 			new_file.write(content)
-		
+
 		new_file.close()
 		filelock.release()
-	except Exception,e:
-		log("Could not save the RSGF file",filename)
-		log(e)
+	except IOError, e:
 		filelock.release()
-		raise WriteException(_("Could not save the RSGF file: ")+filename+"\n"+str(e))
+		log("Could not save the RSGF file",filename)
+		log("=>", e.errno,e.strerror)
+		raise GRPException(_("Could not save the RSGF file: ")+filename+"\n"+e.strerror)
+	except Exception,e:
+		filelock.release()
+		log("Could not save the RSGF file",filename)
+		log("=>",e)
+		raise GRPException(_("Could not save the RSGF file: ")+filename+"\n"+unicode(e))
 
 def write_sgf(filename,sgf_content):
 	filelock.acquire()
@@ -249,59 +282,94 @@ def write_sgf(filename,sgf_content):
 			content=sgf_content
 		else:
 			content=sgf_content.serialise()
+		filename2=filename
+		if type(filename2)==type(u"abc"):
+			if sys.getfilesystemencoding()!="mbcs":
+				filename2=filename2.encode(sys.getfilesystemencoding())
 		try:
-			new_file=open(filename,'w')
+			new_file=open(filename2,'w')
 			new_file.write(content)
 		except:
-			new_file=codecs.open(filename,"w","utf-8")
+			new_file=codecs.open(filename2,"w","utf-8")
 			new_file.write(content)
-		
+
 		new_file.close()
 		filelock.release()
-	except Exception,e:
-		log("Could not save the SGF file",filename)
-		log(e)
+	except IOError, e:
 		filelock.release()
-		raise WriteException(_("Could not save the SGF file: ")+filename+"\n"+str(e))
+		log("Could not save the SGF file",filename)
+		log("=>", e.errno,e.strerror)
+		raise GRPException(_("Could not save the RSGF file: ")+filename+"\n"+e.strerror)
+	except Exception,e:
+		filelock.release()
+		log("Could not save the RSGF file",filename)
+		log("=>",e)
+		raise GRPException(_("Could not save the SGF file: ")+filename+"\n"+unicode(e))
+
+def convert_sgf_to_utf(content):
+	game = sgf.Sgf_game.from_string(content)
+	gameroot=game.get_root()
+	sgf_moves.indicate_first_player(game) #adding the PL property on the root
+	if node_has(gameroot,"CA"):
+		ca=node_get(gameroot,"CA")
+		if ca=="UTF-8":
+			#the sgf is already in UTF, so we accept it directly
+			return game
+		else:
+			log("Encoding is",ca)
+			log("Converting from",ca,"to UTF-8")
+			encoding=(codecs.lookup(ca).name.replace("_", "-").upper().replace("ISO8859", "ISO-8859")) #from gomill code
+			content=game.serialise()
+			content=content.decode(encoding,errors='ignore') #transforming content into a unicode object
+			content=content.replace("CA["+ca+"]","CA[UTF-8]")
+			game = sgf.Sgf_game.from_string(content.encode("utf-8")) #sgf.Sgf_game.from_string requires str object, not unicode
+			return game
+	else:
+		log("the sgf has no declared encoding, we will enforce UTF-8 encoding")
+		content=game.serialise()
+		content=content.decode("utf",errors="replace").encode("utf")
+		game = sgf.Sgf_game.from_string(content,override_encoding="UTF-8")
+		return game
 
 def open_sgf(filename):
 	filelock.acquire()
 	try:
 		#log("Opening SGF file",filename)
-		txt = open(filename,'r')
-		game = sgf.Sgf_game.from_string(clean_sgf(txt.read()))
+		filename2=filename
+		if type(filename2)==type(u"abc"):
+			if sys.getfilesystemencoding()!="mbcs":
+				filename2=filename2.encode(sys.getfilesystemencoding())
+		txt = open(filename2,'r')
+		content=clean_sgf(txt.read())
 		txt.close()
 		filelock.release()
-		gameroot=game.get_root()
-		if gameroot.has_property("CA"):
-			ca=gameroot.get("CA")
-			if ca=="UTF-8":
-				#the sgf is already in UTF, so we accept it directly
-				return game
-			else:
-				log("Encoding for",filename,"is",ca)
-				log("Converting from",ca,"to UTF-8")
-				encoding=(codecs.lookup(ca).name.replace("_", "-").upper().replace("ISO8859", "ISO-8859")) #from gomill code
-				content=game.serialise()
-				content=content.decode(encoding,errors='ignore').encode("utf-8")
-				content=content.replace("CA["+ca+"]","CA[UTF-8]")
-				game = sgf.Sgf_game.from_string(content)
-				return game
-		else:
-			#the sgf has no declared encoding, we will enforce UTF-8 encoding
-			content=game.serialise()
-			content=content.decode("utf").encode("utf") #let's check the content can be converted to UTF-8
-			game = sgf.Sgf_game.from_string(content,override_encoding="UTF-8")
-			return game
+		game = convert_sgf_to_utf(content)
 		return game
+	except IOError, e:
+		filelock.release()
+		log("Could not open the SGF file",filename)
+		log("=>", e.errno,e.strerror)
+		raise GRPException(_("Could not open the RSGF file: ")+filename+"\n"+e.strerror)
 	except Exception,e:
 		log("Could not open the SGF file",filename)
-		log(e)
-		filelock.release()
-		raise WriteException(_("Could not open the SGF file: ")+filename+"\n"+str(e))
-def clean_sgf(txt):
-	return txt
+		log("=>",e)
+		try:
+			filelock.release()
+		except:
+			pass
+		raise GRPException(_("Could not open the SGF file: ")+filename+"\n"+unicode(e))
 
+def clean_sgf(txt):
+	#txt is still of type str here....
+
+	#https://github.com/pnprog/goreviewpartner/issues/56
+	txt=txt.replace(str(";B[  ])"),str(";B[])")).replace(str(";W[  ])"),str(";W[])"))
+
+	#https://github.com/pnprog/goreviewpartner/issues/71
+	txt=txt.replace(str("KM[]"),str(""))
+	txt=txt.replace(str("B[**];"),str("B[];")).replace(str("W[**];"),str("W[];"))
+
+	return txt
 def get_all_sgf_leaves(root,deep=0):
 
 	if len(root)==0:
@@ -352,20 +420,17 @@ def check_selection(selection,nb_moves):
 	return move_selection
 
 def check_selection_for_color(move_zero,move_selection,color):
-
 	if color=="black":
 		new_move_selection=[]
 		for m in move_selection:
-			one_move=go_to_move(move_zero,m)
-			player_color,unused=one_move.get_move()
+			player_color=guess_color_to_play(move_zero,m)
 			if player_color.lower()=='b':
 				new_move_selection.append(m)
 		return new_move_selection
 	elif color=="white":
 		new_move_selection=[]
 		for m in move_selection:
-			one_move=go_to_move(move_zero,m)
-			player_color,unused=one_move.get_move()
+			player_color=guess_color_to_play(move_zero,m)
 			if player_color.lower()=='w':
 				new_move_selection.append(m)
 		return new_move_selection
@@ -381,12 +446,9 @@ class RangeSelector(Toplevel):
 		root = self
 		root.parent.title('GoReviewPartner')
 		self.protocol("WM_DELETE_WINDOW", self.close)
-		
+
 		self.bots=bots
-
 		self.g=open_sgf(self.filename)
-		content=self.g.serialise()
-
 		self.move_zero=self.g.get_root()
 		nb_moves=get_moves_number(self.move_zero)
 		self.nb_moves=nb_moves
@@ -395,20 +457,30 @@ class RangeSelector(Toplevel):
 		Label(self,text="").grid(row=row,column=1)
 
 		row+=1
-		if bots!=None:
-			Label(self,text=_("Bot to use for analysis:")).grid(row=row,column=1,sticky=N+W)
-			value={"slow":" (%s)"%_("Slow profile"),"fast":" (%s)"%_("Fast profile")}
-			bot_names=[bot['name']+value[bot['profile']] for bot in bots]
-			self.bot_selection=StringVar()
+		Label(self,text=_("Bot to use for analysis:")).grid(row=row,column=1,sticky=N+W)
+		#value={"slow":" (%s)"%_("Slow profile"),"fast":" (%s)"%_("Fast profile")}
+		bot_names=[bot['name']+" - "+bot['profile'] for bot in bots]
+		self.bot_selection=StringVar()
 
-			apply(OptionMenu,(self,self.bot_selection)+tuple(bot_names)).grid(row=row,column=2,sticky=W)
-			self.bot_selection.set(bot_names[0])
-
-			row+=1
-			Label(self,text="").grid(row=row,column=1)
+		if not bot_names:
+			Label(self,text=_("There is no bot configured in Settings")).grid(row=row,column=2,sticky=W)
+		else:
+		  botOptionMenu = apply(OptionMenu,(self, self.bot_selection)+tuple(bot_names))
+		  botOptionMenu.config(width=20)
+		  botOptionMenu.grid(row=row,column=2,sticky=W)
+		  self.bot_selection.set(bot_names[0])
+		
+		analyser=grp_config.get("Analysis","analyser")
+		if analyser in bot_names:
+			self.bot_selection.set(analyser)
 
 		row+=1
-		Label(self,text=_("Select variation to be analysed")).grid(row=row,column=1,sticky=W)
+		Label(self,text="").grid(row=row,column=1)
+
+
+		row+=1
+		variation_label_widget=Label(self,text=_("Select variation to be analysed"))
+
 		self.leaves=get_all_sgf_leaves(self.move_zero)
 		self.variation_selection=StringVar()
 		self.variation_selection.trace("w", self.variation_changed)
@@ -420,7 +492,31 @@ class RangeSelector(Toplevel):
 			v+=1
 		self.variation_selection.set(options[0])
 
-		apply(OptionMenu,(self,self.variation_selection)+tuple(options)).grid(row=row,column=2,sticky=W)
+		variation_menu_widget=apply(OptionMenu,(self,self.variation_selection)+tuple(options))
+
+		existing_variations = StringVar()
+		existing_variations.set("remove_everything")
+
+		if node_has(self.move_zero,"RSGF"):
+			existing_variations.set("keep")
+			row+=10
+			Label(self,text=_("This analysis will be performed on an already analysed SGF file.")).grid(row=row,column=1,columnspan=2,sticky=W)
+			row+=1
+			Label(self,text=_("What to do with the existing variations?")).grid(row=row,column=1,columnspan=2,sticky=W)
+
+			row+=1
+			d1=Radiobutton(self,text=_("Keep existing variations"),variable=existing_variations, value="keep")
+			d1.grid(row=row,column=1,sticky=W)
+
+			row+=1
+			d2=Radiobutton(self,text=_("Replace existing variations"),variable=existing_variations, value="replace")
+			d2.grid(row=row,column=1,sticky=W)
+
+		else:
+			variation_label_widget.grid(row=row,column=1,sticky=W)
+			variation_menu_widget.grid(row=row,column=2,sticky=W)
+
+		self.rsgf_filename=".".join(self.filename.split(".")[:-1])+".rsgf"
 
 		row+=1
 		Label(self,text="").grid(row=row,column=1)
@@ -459,8 +555,8 @@ class RangeSelector(Toplevel):
 		c0.grid(row=row,column=1,sticky=W)
 		self.after(0,c0.select)
 
-		if 'PB[' in content:
-			black_player=content.split('PB[')[1].split(']')[0]
+		if node_has(self.move_zero,'PB'):
+			black_player=node_get(self.move_zero,'PB')
 			if black_player.lower().strip() in ['black','']:
 				black_player=''
 			else:
@@ -468,8 +564,8 @@ class RangeSelector(Toplevel):
 		else:
 			black_player=''
 
-		if 'PW[' in content:
-			white_player=content.split('PW[')[1].split(']')[0]
+		if node_has(self.move_zero,'PW'):
+			white_player=node_get(self.move_zero,'PW')
 			if white_player.lower().strip() in ['white','']:
 				white_player=''
 			else:
@@ -478,29 +574,29 @@ class RangeSelector(Toplevel):
 			white_player=''
 
 		row+=1
-		c1=Radiobutton(self,text=_("Black only").encode("utf")+black_player,variable=c, value="black")
+		c1=Radiobutton(self,text=_("Black only")+black_player,variable=c, value="black")
 		c1.grid(row=row,column=1,sticky=W)
 
 		row+=1
-		c2=Radiobutton(self,text=_("White only").encode("utf")+white_player,variable=c, value="white")
+		c2=Radiobutton(self,text=_("White only")+white_player,variable=c, value="white")
 		c2.grid(row=row,column=1,sticky=W)
 
 		row+=10
 		Label(self,text="").grid(row=row,column=1)
-		
+
 		row+=1
 		Label(self,text=_("Confirm the value of komi")).grid(row=row,column=1,sticky=W)
 
 		komi_entry=Entry(self)
 		komi_entry.grid(row=row,column=2,sticky=W)
 		komi_entry.delete(0, END)
-		
+
 		try:
 			komi=self.g.get_komi()
 			komi_entry.insert(0, str(komi))
 		except Exception, e:
-			log("Error while reading komi value, please check:\n"+str(e))
-			show_error(_("Error while reading komi value, please check:")+"\n"+str(e),parent=self)
+			log("Error while reading komi value, please check:\n"+unicode(e))
+			show_error(_("Error while reading komi value, please check:")+"\n"+unicode(e),parent=self)
 			komi_entry.insert(0, "0")
 
 		row+=10
@@ -517,9 +613,13 @@ class RangeSelector(Toplevel):
 		row+=10
 		Label(self,text="").grid(row=row,column=1)
 		row+=1
-		Button(self,text=_("Start"),command=self.start).grid(row=row,column=2,sticky=E)
+		start_button=Button(self,text=_("Start"),command=self.start)
+		start_button.grid(row=row,column=2,sticky=E)
+		if not bot_names:
+			start_button.config(state="disabled")
 		self.mode=s
 		self.color=c
+		self.existing_variations=existing_variations
 		self.nb_moves=nb_moves
 		self.only_entry=only_entry
 		self.komi_entry=komi_entry
@@ -563,17 +663,9 @@ class RangeSelector(Toplevel):
 		if self.bots!=None:
 			bot=self.bot_selection.get()
 			log("bot selection:",bot)
-			value={"slow":" (%s)"%_("Slow profile"),"fast":" (%s)"%_("Fast profile")}
-			bot={bot['name']+value[bot['profile']]:bot for bot in self.bots}[bot]
-
-			#RunAnalysis={bot_label:bot['runanalysis'] for bot in self.bots}[bot]
-			#profile={bot_label:bot['profile'] for bot in self.bots}[bot]
+			bot={bot['name']+" - "+bot['profile']:bot for bot in self.bots}[bot]
 			RunAnalysis=bot['runanalysis']
-			profile=bot['profile']
 
-			#bot_selection=int(self.bot_selection.curselection()[0])
-			#log("bot selection:",self.bots[bot_selection][0])
-			#RunAnalysis=self.bots[bot_selection][1]
 
 		if self.mode.get()=="all":
 			intervals="all moves"
@@ -583,7 +675,7 @@ class RangeSelector(Toplevel):
 			intervals="moves "+selection
 			move_selection=check_selection(selection,self.nb_moves)
 			if move_selection==False:
-				show_error(_("Could not make sense of the moves range.")+"\n"+_("Please indicate one or more move intervals (ie: \"10-20, 40,50-51,63,67\")"),parent=self)
+				show_error(_("Could not make sense of the moves range.")+"\n"+_("Please indicate one or more move intervals (e.g. \"10-20, 40,50-51,63,67\")"),parent=self)
 				return
 
 		if self.color.get()=="black":
@@ -604,9 +696,10 @@ class RangeSelector(Toplevel):
 		variation=int(self.variation_selection.get().split(" ")[1])-1
 		log(variation)
 
+		grp_config.set("Analysis","analyser",self.bot_selection.get())
 		grp_config.set("Analysis","StopAtFirstResign",self.StopAtFirstResign.get())
 
-		popup=RunAnalysis(self.parent,self.filename,move_selection,intervals,variation,komi,profile)
+		popup=RunAnalysis(self.parent,(self.filename,self.rsgf_filename),move_selection,intervals,variation,komi,bot,self.existing_variations.get())
 		self.parent.add_popup(popup)
 		self.close()
 
@@ -615,7 +708,7 @@ class RangeSelector(Toplevel):
 
 import Queue
 import time
-from Tkinter import *
+
 import ttk
 
 
@@ -623,6 +716,12 @@ def guess_color_to_play(move_zero,move_number):
 
 	one_move=go_to_move(move_zero,move_number)
 
+	if one_move==False:
+		previous_move_color=guess_color_to_play(move_zero,move_number-1)
+		if previous_move_color.lower()=='b':
+			return "w"
+		else:
+			return "b"
 
 
 	player_color,unused=one_move.get_move()
@@ -630,10 +729,13 @@ def guess_color_to_play(move_zero,move_number):
 		return player_color
 
 	if one_move is move_zero:
-		if move_zero.get("PL").lower()=="b":
+		if node_has(move_zero,"PL"):
+			if node_get(move_zero,"PL").lower()=="b":
+				return "w"
+			if node_get(move_zero,"PL").lower()=="w":
+				return "b"
+		else:
 			return "w"
-		if move_zero.get("PL").lower()=="w":
-			return "b"
 
 	previous_move_color=guess_color_to_play(move_zero,move_number-1)
 
@@ -643,9 +745,9 @@ def guess_color_to_play(move_zero,move_number):
 		return "b"
 
 class LiveAnalysisBase():
-	def __init__(self,g,filename,profile="slow"):
+	def __init__(self,g,rsgf_filename,profile):
 		self.g=g
-		self.filename=filename
+		self.rsgf_filename=rsgf_filename
 		self.profile=profile
 		self.bot=self.initialize_bot()
 		self.update_queue=Queue.PriorityQueue()
@@ -653,15 +755,15 @@ class LiveAnalysisBase():
 		self.best_moves_queue=Queue.Queue()
 
 		self.move_zero=self.g.get_root()
-		
+
 		self.no_variation_if_same_move=True
-		
+
 		size=self.g.get_size()
 		log("size of the tree:", size)
 		self.size=size
 
 		self.no_variation_if_same_move=grp_config.getboolean('Analysis', 'NoVariationIfSameMove')
-		
+
 		self.maxvariations=grp_config.getint("Analysis", "maxvariations")
 
 		self.stop_at_first_resign=False
@@ -676,10 +778,10 @@ class LiveAnalysisBase():
 			self.bot.place_white(gtp_move)
 		else:
 			self.bot.place_black(gtp_move)
-	
+
 	def undo(self):
 		self.bot.undo()
-	
+
 	def run_live_analysis(self):
 		self.current_move=1
 		wait=0
@@ -693,14 +795,15 @@ class LiveAnalysisBase():
 						log("Analyser received a high priority message")
 						wait=0
 					self.update_queue.put((priority,msg))
+
 				except:
 					continue
-				
-				
+
+
 			if not self.cpu_lock.acquire(False):
 				time.sleep(2) #let's wait just enough time in case human player already has a move to play
 				continue
-			
+
 			try:
 				priority,msg=self.update_queue.get(False)
 			except:
@@ -721,16 +824,14 @@ class LiveAnalysisBase():
 
 			if type(msg)==type("undo xxx"):
 				move_to_undo=int(msg.split()[1])
-				#move_to_undo=int(priority+1)
 				log("received undo msg for move",move_to_undo,"and beyong")
-				if move_to_undo>self.current_move:
-					log("Analysis of move",move_to_undo,"has not started yet, so let's forget about it")
-				else:
-					log("Analysis of move",move_to_undo,"was completed already, let's remove that branch")
-					while self.current_move>=move_to_undo:
-						log("Undoing move",self.current_move,"through GTP")
-						self.undo()
-						self.current_move-=1
+
+
+				log("GTP bot is currently at move",len(self.bot.history))
+				while len(self.bot.history)>=move_to_undo:
+					log("Undoing move",len(self.bot.history),"through GTP")
+					self.undo()
+					self.current_move-=1
 
 				log("Deleting the SGF branch")
 				parent=go_to_move(self.move_zero,move_to_undo-1)
@@ -738,13 +839,14 @@ class LiveAnalysisBase():
 				old_branch=parent[1]
 
 				for p in ["ES","CBM","BWWR","VNWR", "MCWR","UBS","LBS","C"]:
-					if old_branch.has_property(p):
-						new_branch.set(p,old_branch.get(p))
+					if node_has(old_branch,p):
+						node_set(new_branch,p,node_get(old_branch,p))
 
 				old_branch.delete()
-				write_rsgf(self.filename[:-4]+".rsgf",self.g)
+				write_rsgf(self.rsgf_filename,self.g)
 				self.cpu_lock.release()
 				self.update_queue.put((0,"wait"))
+				self.best_moves_queue.put((priority,msg))#sending echo
 				continue
 
 			log("Analyser received msg to analyse move",msg)
@@ -768,13 +870,13 @@ class LiveAnalysisBase():
 			answer=self.run_analysis(self.current_move)
 			log("Analyser best move: move %i at %s"%(self.current_move,answer))
 			self.best_moves_queue.put([self.current_move,answer])
-			
+
 			try:
 				game_move=go_to_move(self.move_zero,self.current_move).get_move()[1]
 				log("Game move:",game_move)
 				if game_move:
 					if self.no_variation_if_same_move:
-						if ij2gtp(game_move)==answer.lower():
+						if ij2gtp(game_move)==answer:
 							log("Bot move and game move are the same ("+answer+"), removing variations for this move")
 							parent=go_to_move(self.move_zero,self.current_move-1)
 							for child in parent[1:]:
@@ -782,10 +884,10 @@ class LiveAnalysisBase():
 			except:
 				#what could possibly go wrong with this?
 				pass
-			
+
 			if self.update_queue.empty():
 				self.label_queue.put("")
-			write_rsgf(self.filename[:-4]+".rsgf",self.g)
+			write_rsgf(self.rsgf_filename,self.g)
 			self.cpu_lock.release()
 			#self.current_move+=1
 			time.sleep(.1) #enought time for Live analysis to grap the lock
@@ -796,11 +898,12 @@ class LiveAnalysisBase():
 
 
 class RunAnalysisBase(Toplevel):
-	def __init__(self,parent,filename,move_range,intervals,variation,komi,profile="slow"):
+	def __init__(self,parent,filenames,move_range,intervals,variation,komi,profile,existing_variations="remove_everything"):
 		if parent!="no-gui":
 			Toplevel.__init__(self,parent)
 		self.parent=parent
-		self.filename=filename
+		self.filename=filenames[0]
+		self.rsgf_filename=filenames[1]
 		self.move_range=move_range
 		self.update_queue=Queue.Queue(1)
 		self.intervals=intervals
@@ -809,62 +912,88 @@ class RunAnalysisBase(Toplevel):
 		self.profile=profile
 		self.g=None
 		self.move_zero=None
-
 		self.current_move=None
 		self.time_per_move=None
-		
-		self.no_variation_if_same_move=self.no_variation_if_same_move=grp_config.getboolean('Analysis', 'NoVariationIfSameMove')
-		
+		self.existing_variations=existing_variations
+
+		self.no_variation_if_same_move=grp_config.getboolean('Analysis', 'NoVariationIfSameMove')
+
 		self.error=None
+		try:
+			self.g=open_sgf(self.filename)
+			self.move_zero=self.g.get_root()
+			self.max_move=get_moves_number(self.move_zero)
 
-		self.g=open_sgf(self.filename)
-		sgf_moves.indicate_first_player(self.g)
+			if existing_variations=="remove_everything":
+				leaves=get_all_sgf_leaves(self.g.get_root())
+				log("keeping only variation",self.variation)
+				keep_only_one_leaf(leaves[self.variation][0])
+			else:
+				log("analysis will be performed on first variation")
+				if existing_variations=="keep":
+					move=1
+					log("checking for moves already analysed")
+					already_analysed=[]
+					while move<=self.max_move:
+						if move in self.move_range:
+							node=go_to_move(self.move_zero,move)
+							if len(node.parent)>1:
+								already_analysed.append(move)
+						move+=1
+					log("The following moves are already analysed and will be skipped")
+					log(already_analysed)
+					for move in already_analysed:
+						self.move_range.remove(move)
+					if not self.move_range:
+						self.move_range=["empty"]
 
-		leaves=get_all_sgf_leaves(self.g.get_root())
-		log("keeping only variation",self.variation)
-		keep_only_one_leaf(leaves[self.variation][0])
+			size=self.g.get_size()
+			log("size of the tree:", size)
+			self.size=size
 
-		size=self.g.get_size()
-		log("size of the tree:", size)
-		self.size=size
+			log("Setting new komi")
+			node_set(self.g.get_root(),"KM",self.komi)
+		except Exception,e:
+			self.error=unicode(e)
+			self.abort()
+			return
 
-		log("Setting new komi")
-		self.move_zero=self.g.get_root()
-		self.g.get_root().set("KM", self.komi)
 
 		try:
 			self.bot=self.initialize_bot()
 		except Exception,e:
-			self.error=_("Error while initializing the GTP bot:")+"\n"+str(e)
+			self.error=_("Error while initializing the GTP bot:")+"\n"+unicode(e)
 			self.abort()
 			return
 
 		if not self.bot:
 			return
 
-		self.max_move=get_moves_number(self.move_zero)
+
 		self.total_done=0
 
 		if parent!="no-gui":
 			try:
 				self.initialize_UI()
 			except Exception,e:
-				self.error=_("Error while initializing the graphical interface:")+"\n"+str(e)
+				self.error=_("Error while initializing the graphical interface:")+"\n"+unicode(e)
 				self.abort()
 				return
 			self.root.after(500,self.follow_analysis)
-			
+
 		first_comment=_("Analysis by GoReviewPartner")
 		first_comment+="\n"+_("Bot")+(": %s/%s"%(self.bot.bot_name,self.bot.bot_version))
 		first_comment+="\n"+_("Komi")+(": %0.1f"%self.komi)
 		first_comment+="\n"+_("Intervals")+(": %s"%self.intervals)
-	
+
 		if grp_config.getboolean('Analysis', 'SaveCommandLine'):
 			first_comment+="\n"+(_("Command line")+": %s"%self.bot.command_line)
 
-		self.move_zero.set("RSGF",first_comment.encode("utf")+"\n")
-		self.move_zero.set("BOT",self.bot.bot_name)
-		self.move_zero.set("BOTV",self.bot.bot_version)
+		first_comment+="\n"
+
+		node_set(self.move_zero,"RSGF",first_comment)
+		node_set(self.move_zero,"BOT",self.bot.bot_name)
+		node_set(self.move_zero,"BOTV",self.bot.bot_version)
 
 		self.maxvariations=grp_config.getint("Analysis", "maxvariations")
 
@@ -879,7 +1008,16 @@ class RunAnalysisBase(Toplevel):
 			self.stop_at_first_resign=False
 			log("Stop_At_First_Resign is OFF")
 
+		#when the game last move is not pass or resign
+		#then let's add a pass move and extand the analysis
+		#only if the analysis is part of the last move
+		if self.max_move in self.move_range:
+			last_move=go_to_move(self.move_zero,self.max_move)
 
+			if last_move.get_move()[1]:
+				self.move_range.append(max(self.move_range)+1)
+				self.g.extend_main_sequence()
+				self.max_move+=1
 
 		self.completed=False
 
@@ -900,7 +1038,7 @@ class RunAnalysisBase(Toplevel):
 		#################################################
 
 		log("Analysis for this move is completed")
-	
+
 	def play(self,gtp_color,gtp_move):
 		if gtp_color=='w':
 			self.bot.place_white(gtp_move)
@@ -909,33 +1047,38 @@ class RunAnalysisBase(Toplevel):
 
 	def run_all_analysis(self):
 		self.current_move=1
-
+				
 		while self.current_move<=self.max_move:
 			answer=""
 			if self.current_move in self.move_range:
+				parent=go_to_move(self.move_zero,self.current_move-1)
+				if len(parent)>1:
+					log("Removing existing",len(parent)-1,"variations")
+					for other_leaf in parent[1:]:
+						other_leaf.delete()
 				answer=self.run_analysis(self.current_move)
 				self.total_done+=1
-				write_rsgf(self.filename[:-4]+".rsgf",self.g)
+				write_rsgf(self.rsgf_filename,self.g)
 				log("For this position,",self.bot.bot_name,"would play:",answer)
 				log("Analysis for this move is completed")
 			elif self.move_range:
 				log("Move",self.current_move,"not in the list of moves to be analysed, skipping")
-			
+
 			try:
 				game_move=go_to_move(self.move_zero,self.current_move).get_move()[1]
 				if game_move:
 					if self.no_variation_if_same_move:
-						if ij2gtp(game_move)==answer.lower():
+						if ij2gtp(game_move)==answer:
 							log("Bot move and game move are the same ("+answer+"), removing variations for this move")
 							parent=go_to_move(self.move_zero,self.current_move-1)
 							for child in parent[1:]:
 								child.delete()
-							write_rsgf(self.filename[:-4]+".rsgf",self.g)
+							write_rsgf(self.rsgf_filename,self.g)
 			except:
 				#what could possibly go wrong with this?
 				pass
-			
-			if (answer.lower()=="resign") and (self.stop_at_first_resign==True):
+
+			if (answer=="RESIGN") and (self.stop_at_first_resign==True):
 				log("")
 				log("The analysis will stop now")
 				log("")
@@ -953,8 +1096,7 @@ class RunAnalysisBase(Toplevel):
 
 			self.current_move+=1
 			if self.parent!="no-gui":
-				self.update_queue.put(self.current_move)
-			
+				self.update_queue.put(self.total_done)
 		return
 
 	def abort(self):
@@ -984,18 +1126,14 @@ class RunAnalysisBase(Toplevel):
 			remaining_m=remaining_s/60
 			remaining_s=remaining_s-60*remaining_m
 			if self.time_per_move!=0:
-				self.lab2.config(text=_("Remaining time: %ih, %imn, %is")%(remaining_h,remaining_m,remaining_s))
+				self.lab2.config(text=_("Remaining time: %ih, %im, %is")%(remaining_h,remaining_m,remaining_s))
 			self.lab1.config(text=_("Currently at move %i/%i")%(self.current_move,self.max_move))
-			self.pb.step()
-			
-			
 
-			if self.total_done==1:
+			self.pb.update_idletasks()
+			if msg==1:#msg contains the value of self.total_done
 				if not self.review_button:
 					self.review_button=Button(self.right_frame,text=_("Start the review"),command=self.start_review)
 					self.review_button.pack()
-				
-			
 		except:
 			pass
 
@@ -1003,6 +1141,7 @@ class RunAnalysisBase(Toplevel):
 			if msg==None:
 				self.parent.after(250,self.follow_analysis)
 			else:
+				self.pb.step()
 				self.parent.after(10,self.follow_analysis)
 		else:
 			self.end_of_analysis()
@@ -1016,7 +1155,7 @@ class RunAnalysisBase(Toplevel):
 	def start_review(self):
 		import dual_view
 		app=self.parent
-		popup=dual_view.DualView(app,self.filename[:-4]+".rsgf")
+		popup=dual_view.DualView(app,self.rsgf_filename)
 		self.parent.add_popup(popup)
 		if (self.pb["maximum"] == 100) and (self.pb["value"] == 100):
 			self.close()
@@ -1077,33 +1216,31 @@ class RunAnalysisBase(Toplevel):
 		self.pb = ttk.Progressbar(right_frame, orient="horizontal", length=250,maximum=self.max_move+1, mode="determinate")
 		self.pb.pack()
 
-
 		try:
-			write_rsgf(self.filename[:-4]+".rsgf",self.g)
+			write_rsgf(self.rsgf_filename,self.g)
 		except Exception,e:
-			show_error(str(e),parent=self)
 			self.lab1.config(text=_("Aborted"))
 			self.lab2.config(text="")
-			return
+			raise e
 
 		self.t0=time.time()
-		
+
 		self.root=root
 		self.review_button=None
 
 
 
 class BotOpenMove():
-	def __init__(self,sgf_g,profile="slow"):
+	def __init__(self,sgf_g,profile):
 		self.name='Bot'
 		self.bot=None
 		self.okbot=False
 		self.sgf_g=sgf_g
 		self.profile=profile
 
-	def start(self):
+	def start(self,silentfail=True):
 		try:
-			result=self.my_starting_procedure(self.sgf_g,profile=self.profile,silentfail=True)
+			result=self.my_starting_procedure(self.sgf_g,profile=self.profile,silentfail=silentfail)
 			if result:
 				self.bot=result
 				self.okbot=True
@@ -1144,91 +1281,78 @@ class BotOpenMove():
 			log("killing",self.name)
 			self.bot.close()
 
+def bot_starting_procedure(bot_name,bot_gtp_name,bot_gtp,sgf_g,profile,silentfail=False):
 
-class LaunchingException(Exception):
-	pass
-
-def bot_starting_procedure(bot_name,bot_gtp_name,bot_gtp,sgf_g,profile="slow",silentfail=False):
-	log("Bot starting procedure started with profile =",profile)
+	log("Bot starting procedure started with profile =",profile["profile"])
 	log("\tbot name:",bot_name)
 	log("\tbot gtp name",bot_gtp_name)
-	if profile=="slow":
-		command_entry="SlowCommand"
-		parameters_entry="SlowParameters"
-	elif profile=="fast":
-		command_entry="FastCommand"
-		parameters_entry="FastParameters"
+
+	command_entry=profile["command"]
+	parameters_entry=profile["parameters"]
 
 	size=sgf_g.get_size()
 
 	try:
-		try:
-			bot_command_line=grp_config.get(bot_name, command_entry)
-		except:
-			#normaly, this should not happen anymore.
-			#to be deleted soon, or moved somewhere else
-			raise LaunchingException(_("The config.ini file does not contain %s entry for %s !")%(command_entry, bot_name))
-
-		if not bot_command_line:
-			raise LaunchingException(_("The config.ini file %s entry for %s is empty!")%(command_entry, bot_name))
 
 		log("Starting "+bot_name+"...")
 		try:
-			bot_command_line=[grp_config.get(bot_name, command_entry)]+grp_config.get(bot_name, parameters_entry).split()
+			#bot_command_line=[grp_config.get(bot_name, command_entry)]+grp_config.get(bot_name, parameters_entry).split()
+			bot_command_line=[command_entry]+parameters_entry.split()
 			bot=bot_gtp(bot_command_line)
 		except Exception,e:
-			raise LaunchingException((_("Could not run %s using the command from config.ini file:")%bot_name)+"\n"+grp_config.get(bot_name, command_entry)+" "+grp_config.get(bot_name, parameters_entry)+"\n"+str(e))
+			raise GRPException((_("Could not run %s using the command from config.ini file:")%bot_name)+"\n"+command_entry+" "+parameters_entry+"\n"+unicode(e))
 
 		log(bot_name+" started")
 		log(bot_name+" identification through GTP...")
 		try:
 			answer=bot.name()
 		except Exception, e:
-			raise LaunchingException((_("%s did not replied as expected to the GTP name command:")%bot_name)+"\n"+str(e))
+			raise GRPException((_("%s did not reply as expected to the GTP name command:")%bot_name)+"\n"+unicode(e))
 
-
-		if answer!=bot_gtp_name:
-			raise LaunchingException((_("%s did not identified itself as expected:")%bot_name)+"\n'"+bot_gtp_name+"' != '"+answer+"'")
-
+		if bot_gtp_name!='GtpBot':
+			if answer!=bot_gtp_name:
+				raise GRPException((_("%s did not identify itself as expected:")%bot_name)+"\n'"+bot_gtp_name+"' != '"+answer+"'")
+		else:
+			bot_gtp_name=answer
 
 		log(bot_name+" identified itself properly")
 		log("Checking version through GTP...")
 		try:
 			bot_version=bot.version()
 		except Exception, e:
-			raise LaunchingException((_("%s did not replied as expected to the GTP version command:")%bot_name)+"\n"+str(e))
+			raise GRPException((_("%s did not reply as expected to the GTP version command:")%bot_name)+"\n"+unicode(e))
 
 		log("Version: "+bot_version)
 		log("Setting goban size as "+str(size)+"x"+str(size))
 		try:
 			ok=bot.boardsize(size)
 		except:
-			raise LaunchingException((_("Could not set the goboard size using GTP command. Check that %s is running in GTP mode.")%bot_name))
+			raise GRPException((_("Could not set the goboard size using GTP command. Check that %s is running in GTP mode.")%bot_name))
 
 		if not ok:
-			raise LaunchingException(_("%s rejected this board size (%ix%i)")%(bot_name,size,size))
+			raise GRPException(_("%s rejected this board size (%ix%i)")%(bot_name,size,size))
 
 
 		log("Clearing the board")
 		bot.reset()
-		
+
 		log("Checking for existing stones or handicap stones on the board")
 		gameroot=sgf_g.get_root()
-		if gameroot.has_property("HA"):
-			nb_handicap=gameroot.get("HA")
+		if node_has(gameroot,"HA"):
+			nb_handicap=node_get(gameroot,"HA")
 			log("The SGF indicates",nb_handicap,"stone(s)")
 		else:
 			nb_handicap=0
 			log("The SGF does not indicate handicap stone")
-		
+		#import pdb; pdb.set_trace()
 		board, unused = sgf_moves.get_setup_and_moves(sgf_g)
 		nb_occupied_points=len(board.list_occupied_points())
 		log("The SGF indicates",nb_occupied_points,"occupied point(s)")
-		
+
 		free_handicap_black_stones_positions=[]
 		already_played_black_stones_position=[]
 		already_played_white_stones_position=[]
-		
+
 		for color, move in board.list_occupied_points():
 			if move != None:
 				row, col = move
@@ -1245,11 +1369,11 @@ def bot_starting_procedure(bot_name,bot_gtp_name,bot_gtp,sgf_g,profile="slow",si
 		if len(free_handicap_black_stones_positions)>0:
 			log("Setting handicap stones at"," ".join(free_handicap_black_stones_positions))
 			bot.set_free_handicap(free_handicap_black_stones_positions)
-		
+
 		for stone in already_played_black_stones_position:
 			log("Adding a black stone at",stone)
 			bot.place_black(stone)
-		
+
 		for stone in already_played_white_stones_position:
 			log("Adding a white stone at",stone)
 			bot.place_white(stone)
@@ -1261,11 +1385,11 @@ def bot_starting_procedure(bot_name,bot_gtp_name,bot_gtp,sgf_g,profile="slow",si
 
 		bot.bot_name=bot_gtp_name
 		bot.bot_version=bot_version
-	except LaunchingException,e:
+	except Exception,e:
 		if silentfail:
 			log(e)
 		else:
-			show_error(e)
+			show_error(unicode(e))
 		return False
 	return bot
 
@@ -1313,14 +1437,9 @@ def draw_logo(logo,event=None,stretch="horizontal"):
 
 		logo.create_oval(x1, y1, x2, y2, fill="black", outline="")
 
-
-
-
-import getopt
-
 import __main__
 try:
-	usage="usage: python "+__main__.__file__+" [--range=<range>] [--color=<both|black|white>] [--komi=<komi>] [--variation=<variation>] [--profil=<fast|slow>] [--no-gui] <sgf file1> <sgf file2> <sgf file3>"
+	usage="usage: python "+__main__.__file__+" [--range=<range>] [--color=<both|black|white>] [--komi=<komi>] [--variation=<variation>] [--profil=<\"profil\">] [--no-gui] <sgf file1> <sgf file2> <sgf file3>"
 except:
 	log("Command line features are disabled")
 	usage=""
@@ -1333,6 +1452,8 @@ def parse_command_line(filename,argv):
 	leaves=get_all_sgf_leaves(move_zero)
 
 	found=False
+
+	#argv=[(unicode(p,errors="replace"),unicode(v,errors="replace")) for p,v in argv] #ok, this is maybe overkill...
 	for p,v in argv:
 		if p=="--variation":
 			try:
@@ -1418,7 +1539,7 @@ def parse_command_line(filename,argv):
 		try:
 			komi=g.get_komi()
 		except Exception, e:
-			msg="Error while reading komi value, please check:\n"+str(e)
+			msg="Error while reading komi value, please check:\n"+unicode(e)
 			msg+="\nPlease indicate komi using --komi parameter"
 			log(msg)
 			show_error(msg)
@@ -1428,17 +1549,12 @@ def parse_command_line(filename,argv):
 
 	found=False
 	for p,v in argv:
-		if p=="--profil":
-			if v.lower() in ("slow","fast"):
-				profil=v
-				found=True
-			else:
-				show_error("Wrong profil parameter\n"+usage)
-				sys.exit()
+		if p=="--profile":
+			profile=v
+			found=True
 	if not found:
-		profil="slow"
-
-	log("Profil:",profil)
+		profile=None
+	log("Profile:",profile)
 
 	nogui=False
 	for p,v in argv:
@@ -1446,7 +1562,7 @@ def parse_command_line(filename,argv):
 			nogui=True
 			break
 
-	return move_selection,intervals,variation,komi,nogui,profil
+	return move_selection,intervals,variation,komi,nogui,profile
 
 # from http://www.py2exe.org/index.cgi/WhereAmI
 def we_are_frozen():
@@ -1483,7 +1599,7 @@ conf = ConfigParser.ConfigParser()
 try:
 	conf.readfp(codecs.open(config_file,"r","utf-8"))
 except Exception, e:
-	show_error("Could not open the config file of Go Review Partner"+"\n"+str(e)) #this cannot be translated
+	show_error("Could not open the config file of Go Review Partner"+"\n"+unicode(e)) #this cannot be translated
 	sys.exit()
 
 class MyConfig():
@@ -1491,7 +1607,7 @@ class MyConfig():
 		self.config = ConfigParser.ConfigParser()
 		self.config.read(config_file)
 		self.config_file=config_file
-		
+
 		self.default_values={}
 		self.default_values["general"]={}
 		self.default_values["general"]["language"]=""
@@ -1499,24 +1615,34 @@ class MyConfig():
 		self.default_values["general"]["rsgffolder"]=""
 		self.default_values["general"]["pngfolder"]=""
 		self.default_values["general"]["livefolder"]=""
-		
+		self.default_values["general"]["stonesound"]=""
+
 		self.default_values["analysis"]={}
 		self.default_values["analysis"]["maxvariations"]="26"
 		self.default_values["analysis"]["savecommandline"]="False"
 		self.default_values["analysis"]["stopatfirstresign"]="False"
 		self.default_values["analysis"]["novariationifsamemove"]="False"
-		
+		self.default_values["analysis"]["analyser"]=""
+
 		self.default_values["review"]={}
 		self.default_values["review"]["fuzzystoneplacement"]="0.2"
 		self.default_values["review"]["realgamesequencedeepness"]="5"
-		self.default_values["review"]["gobanscreenratio"]="0.5"
+		self.default_values["review"]["leftgobanratio"]="0.4"
+		self.default_values["review"]["rightgobanratio"]="0.4"
+		self.default_values["review"]["rightpanelratio"]="0.4"
+		self.default_values["review"]["opengobanratio"]="0.4"
 		self.default_values["review"]["maxvariations"]="26"
 		self.default_values["review"]["variationscoloring"]="blue_for_winning"
 		self.default_values["review"]["variationslabel"]="letter"
 		self.default_values["review"]["invertedmousewheel"]="False"
 		self.default_values["review"]["lastgraph"]=""
-		
+		self.default_values["review"]["yellowbar"]="#F39C12"
+		self.default_values["review"]["lastbot"]=""
+		self.default_values["review"]["lastmap"]=""
+		self.default_values["review"]["oneortwopanels"]="1"
+
 		self.default_values["live"]={}
+		self.default_values["live"]["livegobanratio"]="0.4"
 		self.default_values["live"]["size"]="19"
 		self.default_values["live"]["komi"]="7.5"
 		self.default_values["live"]["handicap"]="0"
@@ -1524,77 +1650,34 @@ class MyConfig():
 		self.default_values["live"]["analyser"]=""
 		self.default_values["live"]["black"]=""
 		self.default_values["live"]["white"]=""
-		
-		self.default_values["leela"]={}
-		self.default_values["leela"]["slowcommand"]=""
-		self.default_values["leela"]["slowparameters"]="--gtp --noponder"
-		self.default_values["leela"]["slowtimepermove"]="15"
-		self.default_values["leela"]["fastcommand"]=""
-		self.default_values["leela"]["fastparameters"]="--gtp --noponder"
-		self.default_values["leela"]["fasttimepermove"]="5"
-		self.default_values["leela"]["analysisbot"]="slow"
-		self.default_values["leela"]["liveanalysisbot"]="both"
-		self.default_values["leela"]["liveplayerbot"]="fast"
-		self.default_values["leela"]["reviewbot"]="fast"
-		
-		self.default_values["gnugo"]={}
-		self.default_values["gnugo"]["slowcommand"]=""
-		self.default_values["gnugo"]["slowparameters"]="--mode=gtp --level=15"
-		self.default_values["gnugo"]["fastcommand"]=""
-		self.default_values["gnugo"]["fastparameters"]="--mode=gtp --level=10"
-		self.default_values["gnugo"]["variations"]="4"
-		self.default_values["gnugo"]["deepness"]="4"
-		self.default_values["gnugo"]["analysisbot"]="slow"
-		self.default_values["gnugo"]["liveanalysisbot"]="both"
-		self.default_values["gnugo"]["liveplayerbot"]="fast"
-		self.default_values["gnugo"]["reviewbot"]="fast"
-		
-		self.default_values["leelazero"]={}
-		self.default_values["leelazero"]["slowcommand"]=""
-		self.default_values["leelazero"]["slowparameters"]="--gtp --noponder --weights weights.txt"
-		self.default_values["leelazero"]["slowtimepermove"]="15"
-		self.default_values["leelazero"]["fastcommand"]=""
-		self.default_values["leelazero"]["fastparameters"]="--gtp --noponder --weights weights.txt"
-		self.default_values["leelazero"]["fasttimepermove"]="5"
-		self.default_values["leelazero"]["analysisbot"]="slow"
-		self.default_values["leelazero"]["liveanalysisbot"]="both"
-		self.default_values["leelazero"]["liveplayerbot"]="fast"
-		self.default_values["leelazero"]["reviewbot"]="fast"
-		
-		self.default_values["aq"]={}
-		self.default_values["aq"]["slowcommand"]=""
-		self.default_values["aq"]["slowparameters"]=""
-		self.default_values["aq"]["fastcommand"]=""
-		self.default_values["aq"]["fastparameters"]=""
-		self.default_values["aq"]["analysisbot"]="slow"
-		self.default_values["aq"]["liveanalysisbot"]="both"
-		self.default_values["aq"]["liveplayerbot"]="fast"
-		self.default_values["aq"]["reviewbot"]="fast"
-		
-		self.default_values["ray"]={}
-		self.default_values["ray"]["slowcommand"]=""
-		self.default_values["ray"]["slowparameters"]="--no-gpu --const-time 15"
-		self.default_values["ray"]["fastcommand"]=""
-		self.default_values["ray"]["fastparameters"]="--no-gpu --const-time 5"
-		self.default_values["ray"]["analysisbot"]="slow"
-		self.default_values["ray"]["liveanalysisbot"]="both"
-		self.default_values["ray"]["liveplayerbot"]="fast"
-		self.default_values["ray"]["reviewbot"]="fast"
-		
+		self.default_values["live"]["thinkbeforeplaying"]="0"
+
 	def set(self, section, key, value):
-		self.config.set(section,key,str(value))
+		if type(value) in (type(1), type(0.5), type(True)):
+			value=unicode(value)
+		if type(section)!=type(u"abc"):
+			print section, "Warning: A non utf section string sent to my config:",section
+		if type(key)!=type(u"abc"):
+			print key,"A non utf key string sent to my config:", key
+		if type(value)!=type(u"abc"):
+			print value,"A non utf value string sent to my config:",value
+		section=unicode(section)
+		key=unicode(key)
+		value=unicode(value)
+		self.config.set(section.encode("utf-8"),key.encode("utf-8"),value.encode("utf-8"))
 		self.config.write(open(self.config_file,"w"))
-	
+
 	def get(self,section,key):
 		try:
 			value=self.config.get(section,key)
+			value=value.decode("utf-8")
 		except:
 			log("Could not read",str(section)+"/"+str(key),"from the config file")
 			log("Using default value")
 			value=self.default_values[section.lower()][key.lower()]
 			self.add_entry(section,key,value)
 		return value
-	
+
 	def getint(self,section,key):
 		try:
 			value=self.config.getint(section,key)
@@ -1605,7 +1688,7 @@ class MyConfig():
 			self.add_entry(section,key,value)
 			value=self.config.getint(section,key)
 		return value
-	
+
 	def getfloat(self,section,key):
 		try:
 			value=self.config.getfloat(section,key)
@@ -1616,7 +1699,7 @@ class MyConfig():
 			self.add_entry(section,key,value)
 			value=self.config.getfloat(section,key)
 		return value
-	
+
 	def getboolean(self,section,key):
 		try:
 			value=self.config.getboolean(section,key)
@@ -1627,14 +1710,35 @@ class MyConfig():
 			self.add_entry(section,key,value)
 			value=self.config.getboolean(section,key)
 		return value
-	
+
 	def add_entry(self,section,key,value):
+		#normally section/key/value should all be unicode here
+		#but just to be sure:
+		section=unicode(section)
+		key=unicode(key)
+		value=unicode(value)
+		#then, let's turn every thing in str
+		section=section.encode("utf-8")
+		key=key.encode("utf-8")
+		value=value.encode("utf-8")
 		if not self.config.has_section(section):
 			log("Adding section",section,"in config file")
 			self.config.add_section(section)
-		log("Setting",str(section)+"/"+str(key),"in the config file")
+		log("Setting",section,"/",key,"in the config file")
 		self.config.set(section,key,value)
 		self.config.write(open(self.config_file,"w"))
+
+	def get_sections(self):
+		return [section.decode("utf-8") for section in self.config.sections()]
+
+	def get_options(self,section):
+		return [option.decode("utf-8") for option in self.config.options(section)]
+
+	def remove_section(self,section):
+		result=self.config.remove_section(section)
+		self.config.write(open(self.config_file,"w"))
+		return result
+
 grp_config=MyConfig(config_file)
 
 log("Reading language setting from config file")
@@ -1642,18 +1746,24 @@ log("Reading language setting from config file")
 lang=grp_config.get("General","Language")
 
 
-available_translations={"en": u"English", "fr" : u"Français", "de" : u"Deutsch", "kr" : u"한국어", "zh": u"中文"}
+available_translations={"en": "English", "fr" : "Français", "de" : "Deutsch", "kr" : "한국어", "zh": "中文", "pl": "Polski", "ru": "Русский"}
 if not lang:
 	log("No language setting in the config file")
 	log("System language detection:")
 	import locale
-	lang=locale.getdefaultlocale()[0].split('_')[0]
-	log("System language:",lang,"("+locale.getdefaultlocale()[0]+")")
-	if lang in available_translations:
-		log("There is a translation available for lang="+lang)
-	else:
-		log("No translation available for lang="+lang)
-		log("Falling back on lang=en")
+	try:
+		lang=locale.getdefaultlocale()[0].split('_')[0]
+		log("System language:",lang,"("+locale.getdefaultlocale()[0]+")")
+		if lang in available_translations:
+			log("There is a translation available for lang="+lang)
+		else:
+			log("No translation available for lang="+lang)
+			log("Falling back on lang=en")
+			lang="en"
+	except Exception, e:
+		log("Could not determine the system language")
+		log(e)
+		log("Falling back to english")
 		lang="en"
 	log("Saving the lang parameter in config.ini")
 	grp_config.set("General","Language",lang)
@@ -1717,12 +1827,12 @@ def batch_analysis(app,batch):
 	#this happens when app=Tk() is detroyed after one analysis, and a new one is created for the next analysis
 	#this bug is sidestepped by recycling the same app=Tk() for all analysis
 	#see also: http://learning-python.com/python-changes-2014-plus.html#s35E
-	
+
 	try:
 		if len(batch)==0:
 			app.remove_popup(app)
 			return
-		
+
 		app.add_popup(app)
 		one_analysis=batch[0]
 
@@ -1734,7 +1844,8 @@ def batch_analysis(app,batch):
 				app.after(1,lambda: batch_analysis(app,batch))
 		else:
 			run,filename,move_selection,intervals,variation,komi,profil=one_analysis
-			log("File to analyse:",filename)
+			log("File to analyse:",filename[0])
+			log("Output file:",filename[1])
 			popup=run(app,filename,move_selection,intervals,variation,komi,profil)
 			app.add_popup(popup)
 			popup.end_of_analysis=popup.close
@@ -1745,75 +1856,14 @@ def batch_analysis(app,batch):
 		log(e)
 		app.force_close()
 
-		
-def slow_profile_bots():
-	from leela_analysis import Leela
-	from gnugo_analysis import GnuGo
-	from ray_analysis import Ray
-	from aq_analysis import AQ
-	from leela_zero_analysis import LeelaZero
 
-	bots=[]
-	for bot in [Leela, AQ, Ray, GnuGo, LeelaZero]:
-		if grp_config.get(bot['name'],"SlowCommand")!="":
-			bots.append(bot)
-			bot['profile']="slow"
-	return bots
-
-def fast_profile_bots():
-	from leela_analysis import Leela
-	from gnugo_analysis import GnuGo
-	from ray_analysis import Ray
-	from aq_analysis import AQ
-	from leela_zero_analysis import LeelaZero
-
-	bots=[]
-	for bot in [Leela, AQ, Ray, GnuGo, LeelaZero]:
-		if grp_config.get(bot['name'],"FastReviewCommand")!="":
-			bots.append(bot)
-			bot['profile']="fast"
-	return bots
-
-
-def get_available(use):
-	from leela_analysis import Leela
-	from gnugo_analysis import GnuGo
-	from ray_analysis import Ray
-	from aq_analysis import AQ
-	from leela_zero_analysis import LeelaZero
-
-	bots=[]
-	for bot in [Leela, AQ, Ray, GnuGo, LeelaZero]:
-		slow=False
-		fast=False
-		if grp_config.get(bot['name'],use)=="slow":
-			slow=True
-		elif grp_config.get(bot['name'],use)=="fast":
-			fast=True
-		elif grp_config.get(bot['name'],use)=="both":
-			slow=True
-			fast=True
-		if slow:
-			if grp_config.get(bot['name'],"SlowCommand")!="":
-				bot2=dict(bot)
-				bots.append(bot2)
-				bot2['profile']="slow"
-		if fast:
-			if grp_config.get(bot['name'],"FastCommand")!="":
-				bot2=dict(bot)
-				bots.append(bot2)
-				bot2['profile']="fast"
-	return bots
-
-
-		
 def opposite_rate(value):
 	return str(100-float(value[:-1]))+"%"
 
 position_data_formating={}
 position_data_formating["CBM"]=_("For this position, %s would play: %s")
-position_data_formating["B"]=_("Black to play, in the game, black played %s")
-position_data_formating["W"]=_("White to play, in the game, white played %s")
+position_data_formating["B"]=_("Black to play. In the game, black played %s")
+position_data_formating["W"]=_("White to play. In the game, white played %s")
 
 def format_data(sgf_property,formating,value="",bot="Bot"):
 	txt=formating[sgf_property]
@@ -1850,10 +1900,12 @@ variation_data_formating["EVAL"]=_("Evaluation for this variation: %s")
 variation_data_formating["RAVE"]=_("RAVE(x%% : y) for this variation: %s")
 
 def save_position_data(node,sgf_property,value):
-	node.set(sgf_property,value)
+	log("WARNING: save_position_data() still in used...")
+	node_set(node,sgf_property,value)
 
 def save_variation_data(node,sgf_property,value):
-	node.set(sgf_property,value)
+	log("WARNING: save_variation_data() still in used...")
+	node_set(node,sgf_property,value)
 
 class Application(Tk):
 	def __init__(self):
@@ -1866,23 +1918,26 @@ class Application(Tk):
 		except:
 			log("(Could not load the application icon)")
 		self.withdraw()
-	
+
 	def force_close(self):
-		import os
 		os._exit(0)
-	
+
 	def remove_popup(self,popup):
 		log("Removing popup")
 		self.popups.remove(popup)
 		log("Totally",len(self.popups),"popups left")
 		if len(self.popups)==0:
+			try:
+				self.destroy()
+			except:
+				pass
 			time.sleep(2)
 			log("")
 			log("GoReviewPartner is closing")
 			log("Hope you enjoyed the experience!")
 			log("")
 			log("List of contributors")
-			
+
 			contributors_file_url=os.path.join(os.path.abspath(pathname),"AUTHORS")
 			contributors_file = codecs.open(contributors_file_url,"r","utf-8")
 			contributors=contributors_file.read()
@@ -1898,9 +1953,9 @@ class Application(Tk):
 			log("You are welcome to support GoReviewPartner (bug reports, code fixes, translations, ideas...). If you are interested, get in touch through Github, Reddit, or LifeIn19x19!")
 			if we_are_frozen():
 				#running from py2exe
-				raw_input()
+				time.sleep(2)
 			self.force_close()
-			
+
 	def add_popup(self,popup):
 		if popup not in self.popups:
 			log("Adding new popup")
@@ -1909,27 +1964,30 @@ class Application(Tk):
 
 
 try:
-	if sys.platform=="darwin":
-		raise Exception("wx and Tkinter do not work well together on MacOS")
+
+	if "linux" not in sys.platform:
+		raise Exception("Avoiding wx")
 	import wx
 	wxApp = wx.App(None)
-	
+
 	def open_all_file(parent,config,filetype):
 		initialdir = grp_config.get(config[0],config[1])
-		dialog = wx.FileDialog(None,_('Select a file'), defaultDir=initialdir, wildcard=filetype[0]+" "+filetype[1], style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST)
+		dialog = wx.FileDialog(None,_('Select a file'), defaultDir=initialdir, wildcard=filetype, style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST)
 		filename = None
 		if dialog.ShowModal() == wx.ID_OK:
 			filename = dialog.GetPath()
 		dialog.Destroy()
 		if filename:
 			initialdir=os.path.dirname(filename)
-			grp_config.set(config[0],config[1],initialdir.encode("utf"))
+			grp_config.set(config[0],config[1],initialdir)
 		return filename
-	
+
 	def open_sgf_file(parent=None):
-		return open_all_file(parent,config=("General","sgffolder"),filetype=(_("SGF file"),"(*.sgf;*.SGF)|*.sgf;*.SGF"))
+		wildcard=_("SGF file")+" (*.sgf;*.SGF)|*.sgf;*.SGF;|"+_("Reviewed SGF file")+" (*.rsgf;*.RSGF)|*.rsgf;*.RSGF"
+		return open_all_file(parent,config=("General","sgffolder"),filetype= wildcard)
 	def open_rsgf_file(parent=None):
-		return open_all_file(parent,config=("General","rsgffolder"),filetype=(_("Reviewed SGF file"),"(*.rsgf;*.RSGF)|*.rsgf;*.RSGF"))
+		wildcard=_("Reviewed SGF file")+" (*.rsgf;*.RSGF)|*.rsgf;*.RSGF"
+		return open_all_file(parent,config=("General","rsgffolder"),filetype=wildcard)
 
 	def save_all_file(filename, parent, config, filetype):
 		initialdir = grp_config.get(config[0],config[1])
@@ -1940,7 +1998,7 @@ try:
 		dialog.Destroy()
 		if filename:
 			initialdir=os.path.dirname(filename)
-			grp_config.set(config[0],config[1],initialdir.encode("utf"))
+			grp_config.set(config[0],config[1],initialdir)
 		return filename
 
 	def save_png_file(filename, parent=None):
@@ -1948,40 +2006,41 @@ try:
 
 	def save_live_game(filename, parent=None):
 		return save_all_file(filename, parent, config=("General","livefolder"), filetype=(_("SGF file"),"(*.sgf;*.SGF)|*.sgf;*.SGF"))
-		
+
 
 except Exception, e:
 	print "Could not import the WX GUI library, please double check it is installed:"
 	log(e)
 	log("=> No problem, falling back to tkFileDialog")
-	
+
 	def open_all_file(parent,config,filetype):
 		import tkFileDialog
 		initialdir = grp_config.get(config[0],config[1])
-		filename=tkFileDialog.askopenfilename(initialdir=initialdir, parent=parent,title=_("Select a file"),filetypes = [(filetype[0], filetype[1])])
+		filename=tkFileDialog.askopenfilename(initialdir=initialdir, parent=parent,title=_("Select a file"),filetypes =filetype )
 		if filename:
 			initialdir=os.path.dirname(filename)
-			grp_config.set(config[0],config[1],initialdir.encode("utf"))
+			grp_config.set(config[0],config[1],initialdir)
+		filename=unicode(filename)
 		return filename
-		
+
 	def open_sgf_file(parent=None):
-		return open_all_file(parent,config=("General","sgffolder"),filetype=((_('SGF file'), '.sgf')))
-	
+		return open_all_file(parent,config=("General","sgffolder"),filetype=[(_('SGF file'), '.sgf'),(_('Reviewed SGF file'), '.rsgf')])
+
 	def open_rsgf_file(parent=None):
-		return open_all_file(parent,config=("General","rsgffolder"),filetype=((_('Reviewed SGF file'), '.rsgf')))
-		
+		return open_all_file(parent,config=("General","rsgffolder"),filetype=[(_('Reviewed SGF file'), '.rsgf')])
+
 	def save_all_file(filename, parent,config,filetype):
 		import tkFileDialog
 		initialdir = grp_config.get(config[0],config[1])
 		filename=tkFileDialog.asksaveasfilename(initialdir=initialdir, parent=parent,title=_('Choose a filename'),filetypes = [(filetype[0], filetype[1])],initialfile=filename)
 		if filename:
 			initialdir=os.path.dirname(filename)
-			grp_config.set(config[0],config[1],initialdir.encode("utf"))
+			grp_config.set(config[0],config[1],initialdir)
 		return filename
-		
+
 	def save_png_file(filename, parent=None):
 		return save_all_file(filename, parent, config=("General","pngfolder"), filetype=(_('PNG image'), '.png'))
-		
+
 	def save_live_game(filename, parent=None):
 		return save_all_file(filename, parent, config=("General","livefolder"), filetype=(_('SGF file'), '.sgf'))
 
@@ -1994,100 +2053,118 @@ def canvas2png(goban,filename):
 	left = goban.winfo_rootx()
 	width = goban.winfo_width()
 	height = goban.winfo_height()
-	monitor = {'top': top, 'left': left, 'width': width, 'height': height}
+	try:
+		dim=goban.dim
+		space=goban.space
+		current_tab_id=goban.parent.right_notebook.index("current")
+		goban.parent.right_notebook.select(0)
+		goban.parent.update_idletasks()
+		goban.parent.right_notebook.select(current_tab_id)
+		goban.parent.update_idletasks()
+		top = goban.winfo_rooty()
+		v_center=top+goban.anchor_y+space*(dim+3)/2
+		h_center=left+goban.anchor_x+space*(dim+3)/2
+		monitor = {'top': int(v_center-space*(dim+3)/2)+1, 'left': int(h_center-space*(dim+3)/2)+1, 'width': int(space*(dim+3))-2, 'height': int(space*(dim+3))-2}
+	except:
+		monitor = {'top': int(top), 'left': int(left), 'width': int(width), 'height': int(height)}
+
+	goban.after(500,lambda: screenshot(monitor, filename))
+
+def screenshot(monitor, filename):
+	log("Screenshot!")
+	log(monitor)
 	sct_img = mss.mss().grab(monitor)
 	mss.tools.to_png(sct_img.rgb, sct_img.size, output=filename)
-
 
 def get_variation_comments(one_variation):
 	comments=''
 	for sgf_property in ("BWWR","PNV","MCWR","VNWR","PLYO","EVAL","RAVE","ES","BKMV"):
-		if one_variation.has_property(sgf_property):
-			comments+=format_data(sgf_property,variation_data_formating,one_variation.get(sgf_property))+"\n"
+		if node_has(one_variation,sgf_property):
+			comments+=format_data(sgf_property,variation_data_formating,node_get(one_variation,sgf_property))+"\n"
 	return comments
-	
+
 def get_position_comments(current_move,gameroot):
 	comments=""
 	if current_move==1:
-		if gameroot.has_property("RSGF"):
-			comments+=gameroot.get("RSGF")
-		if gameroot.has_property("PB"):
-			comments+=_("Black").encode("utf")+": "+gameroot.get("PB")+"\n"
-		if gameroot.has_property("PW"):
-			comments+=_("White").encode("utf")+": "+gameroot.get("PW")+"\n"
-		
+		if node_has(gameroot,"RSGF"):
+			comments+=node_get(gameroot,"RSGF")
+		if node_has(gameroot,"PB"):
+			comments+=_("Black")+": "+node_get(gameroot,"PB")+"\n"
+		if node_has(gameroot,"PW"):
+			comments+=_("White")+": "+node_get(gameroot,"PW")+"\n"
+
 		if comments:
 			comments+="\n"
-	
-	comments+=_("Move %i").encode("utf")%current_move
+
+	comments+=_("Move %i")%current_move
 	game_move_color,game_move=get_node(gameroot,current_move).get_move()
-	
+
 	if not game_move_color:
 		game_move_color=guess_color_to_play(gameroot,current_move)
-	
+
 	if game_move_color.lower()=="w":
-		comments+="\n"+(position_data_formating["W"].encode("utf"))%ij2gtp(game_move).upper()
+		comments+="\n"+(position_data_formating["W"])%ij2gtp(game_move)
 	elif game_move_color.lower()=="b":
-		comments+="\n"+(position_data_formating["B"].encode("utf"))%ij2gtp(game_move).upper()
-	
+		comments+="\n"+(position_data_formating["B"])%ij2gtp(game_move)
+
 	node=get_node(gameroot,current_move)
-	if node.has_property("CBM"):
-		bot=gameroot.get("BOT")
-		comments+="\n"+(position_data_formating["CBM"].encode("utf"))%(bot,node.get("CBM"))
+	if node_has(node,"CBM"):
+		bot=node_get(gameroot,"BOT")
+		comments+="\n"+(position_data_formating["CBM"])%(bot,node_get(node,"CBM"))
 		try:
-			if node[1].has_property("BKMV"):
-				if node[1].get("BKMV")=="yes":
+			if node_has(node[1],"BKMV"):
+				if node_get(node[1],"BKMV")=="yes":
 					comments+=" ("+variation_data_formating["BKMV"]+")"
 		except:
 			pass
 	try:
-		if node.has_property("BWWR"):
-			if node[0].has_property("BWWR"):
+		if node_has(node,"BWWR"):
+			if node_has(node[0],"BWWR"):
 				if node.get_move()[0].lower()=="b":
-					comments+="\n\n"+_("Black win probability:").encode("utf")
-					comments+="\n • "+(_("before %s").encode("utf")%ij2gtp(game_move))+": "+node.get("BWWR").split("/")[0]
-					comments+="\n • "+(_("after %s").encode("utf")%ij2gtp(game_move))+": "+node[0].get("BWWR").split("/")[0]
-					comments+=" (%+.2fpp)"%(float(node[0].get("BWWR").split("%/")[0])-float(node.get("BWWR").split("%/")[0]))
+					comments+="\n\n"+_("Black win probability:")
+					comments+="\n • "+(_("before %s")%ij2gtp(game_move))+": "+node_get(node,"BWWR").split("/")[0]
+					comments+="\n • "+(_("after %s")%ij2gtp(game_move))+": "+node_get(node[0],"BWWR").split("/")[0]
+					comments+=" (%+.2fpp)"%(float(node_get(node[0],"BWWR").split("%/")[0])-float(node_get(node,"BWWR").split("%/")[0]))
 				else:
-					comments+="\n\n"+_("White win probability:").encode("utf")
-					comments+="\n • "+(_("before %s").encode("utf")%ij2gtp(game_move))+": "+node.get("BWWR").split("/")[1]
-					comments+="\n • "+(_("after %s").encode("utf")%ij2gtp(game_move))+": "+node[0].get("BWWR").split("/")[1]
-					comments+=" (%+.2fpp)"%(float(node[0].get("BWWR").split("%/")[1][:-1])-float(node.get("BWWR").split("%/")[1][:-1]))
+					comments+="\n\n"+_("White win probability:")
+					comments+="\n • "+(_("before %s")%ij2gtp(game_move))+": "+node_get(node,"BWWR").split("/")[1]
+					comments+="\n • "+(_("after %s")%ij2gtp(game_move))+": "+node_get(node[0],"BWWR").split("/")[1]
+					comments+=" (%+.2fpp)"%(float(node_get(node[0],"BWWR").split("%/")[1][:-1])-float(node_get(node,"BWWR").split("%/")[1][:-1]))
 	except:
 		pass
-	
+
 	try:
-		if node.has_property("VNWR"):
-			if node[0].has_property("VNWR"):
+		if node_has(node,"VNWR"):
+			if node_has(node[0],"VNWR"):
 				if node.get_move()[0].lower()=="b":
-					comments+="\n\n"+_("Black Value Network win probability:").encode("utf")
-					comments+="\n • "+(_("before %s").encode("utf")%ij2gtp(game_move))+": "+node.get("VNWR").split("/")[0]
-					comments+="\n • "+(_("after %s").encode("utf")%ij2gtp(game_move))+": "+node[0].get("VNWR").split("/")[0]
-					comments+=" (%+.2fpp)"%(float(node[0].get("VNWR").split("%/")[0])-float(node.get("VNWR").split("%/")[0]))
+					comments+="\n\n"+_("Black Value Network win probability:")
+					comments+="\n • "+(_("before %s")%ij2gtp(game_move))+": "+node_get(node,"VNWR").split("/")[0]
+					comments+="\n • "+(_("after %s")%ij2gtp(game_move))+": "+node_get(node[0],"VNWR").split("/")[0]
+					comments+=" (%+.2fpp)"%(float(node_get(node[0],"VNWR").split("%/")[0])-float(node_get(node,"VNWR").split("%/")[0]))
 				else:
-					comments+="\n\n"+_("White Value Network win probability:").encode("utf")
-					comments+="\n • "+(_("before %s").encode("utf")%ij2gtp(game_move))+": "+node.get("VNWR").split("/")[1]
-					comments+="\n • "+(_("after %s").encode("utf")%ij2gtp(game_move))+": "+node[0].get("VNWR").split("/")[1]
-					comments+=" (%+.2fpp)"%(float(node[0].get("VNWR").split("%/")[1][:-1])-float(node.get("VNWR").split("%/")[1][:-1]))
+					comments+="\n\n"+_("White Value Network win probability:")
+					comments+="\n • "+(_("before %s")%ij2gtp(game_move))+": "+node_get(node,"VNWR").split("/")[1]
+					comments+="\n • "+(_("after %s")%ij2gtp(game_move))+": "+node_get(node[0],"VNWR").split("/")[1]
+					comments+=" (%+.2fpp)"%(float(node_get(node[0],"VNWR").split("%/")[1][:-1])-float(node_get(node,"VNWR").split("%/")[1][:-1]))
 	except:
 		pass
-	
+
 	try:
-		if node.has_property("MCWR"):
-			if node[0].has_property("MCWR"):
+		if node_has(node,"MCWR"):
+			if node_has(node[0],"MCWR"):
 				if node.get_move()[0].lower()=="b":
-					comments+="\n\n"+_("Black Monte Carlo win probability:").encode("utf")
-					comments+="\n • "+(_("before %s").encode("utf")%ij2gtp(game_move))+": "+node.get("MCWR").split("/")[0]
-					comments+="\n • "+(_("after %s").encode("utf")%ij2gtp(game_move))+": "+node[0].get("MCWR").split("/")[0]
-					comments+=" (%+.2fpp)"%(float(node[0].get("MCWR").split("%/")[0])-float(node.get("MCWR").split("%/")[0]))
+					comments+="\n\n"+_("Black Monte Carlo win probability:")
+					comments+="\n • "+(_("before %s")%ij2gtp(game_move))+": "+node_get(node,"MCWR").split("/")[0]
+					comments+="\n • "+(_("after %s")%ij2gtp(game_move))+": "+node_get(node[0],"MCWR").split("/")[0]
+					comments+=" (%+.2fpp)"%(float(node_get(node[0],"MCWR").split("%/")[0])-float(node_get(node,"MCWR").split("%/")[0]))
 				else:
-					comments+="\n\n"+_("White Monte Carlo win probability:").encode("utf")
-					comments+="\n • "+(_("before %s").encode("utf")%ij2gtp(game_move))+": "+node.get("MCWR").split("/")[1]
-					comments+="\n • "+(_("after %s").encode("utf")%ij2gtp(game_move))+": "+node[0].get("MCWR").split("/")[1]
-					comments+=" (%+.2fpp)"%(float(node[0].get("MCWR").split("%/")[1][:-1])-float(node.get("MCWR").split("%/")[1][:-1]))
+					comments+="\n\n"+_("White Monte Carlo win probability:")
+					comments+="\n • "+(_("before %s")%ij2gtp(game_move))+": "+node_get(node,"MCWR").split("/")[1]
+					comments+="\n • "+(_("after %s")%ij2gtp(game_move))+": "+node_get(node[0],"MCWR").split("/")[1]
+					comments+=" (%+.2fpp)"%(float(node_get(node[0],"MCWR").split("%/")[1][:-1])-float(node_get(node,"MCWR").split("%/")[1][:-1]))
 	except:
 		pass
-	
+
 	return comments
 
 def get_position_short_comments(current_move,gameroot):
@@ -2095,36 +2172,52 @@ def get_position_short_comments(current_move,gameroot):
 	comments=""
 
 	node=get_node(gameroot,current_move)
-
 	game_move_color,game_move=node.get_move()
+
 	if not game_move_color:
 		game_move_color=guess_color_to_play(gameroot,current_move)
+	comments+="%i/%i: "%(current_move,get_node_number(gameroot))
 
-	comments+=_("%s%i/%i: %s ")%(game_move_color.upper(),current_move,get_node_number(gameroot),ij2gtp(game_move).upper())
+	if node_has(node,"BWWR"):
+		comments+=node_get(node,"BWWR")+"\n"
+	elif node_has(node,"VNWR"):
+		comments+=node_get(node,"VNWR")+"\n"
+	elif node_has(node,"MCWR"):
+		comments+=node_get(node,"MCWR")+"\n"
+	elif node_has(node,"ES"):
+		comments+=node_get(node,"ES")+"\n"
+	else:
+		comments+="\n"
 
-	if node.has_property("CBM"):
-		bot=gameroot.get("BOT")
-		comments+="(%s => %s"%(bot,node.get("CBM"))
+	comments+="\n"
+	if game_move_color.lower()=="b":
+		if node_has(gameroot,"PB"):
+			player=node_get(gameroot,"PB")
+		else:
+			player=_("Black")
+	else:
+		if node_has(gameroot,"PW"):
+			player=node_get(gameroot,"PW")
+		else:
+			player=_("White")
+
+	comments+="%s: %s"%(player,ij2gtp(game_move))
+
+	if node_has(node,"CBM"):
+		bot=node_get(gameroot,"BOT")
+		comments+="\n%s: %s"%(bot,node_get(node,"CBM"))
 		try:
-			if node[1].has_property("BKMV"):
-				if node[1].get("BKMV")=="yes":
-					comments+=_(": Book")
+			if node_has(node[1],"BKMV"):
+				if node_get(node[1],"BKMV")=="yes":
+					comments+=": "+_("Book move")
 		except:
 			pass
-		comments+=")"
-	print comments
+	else:
+		comments+="\n"
 	return comments
 
 def get_node_number(node):
 	return get_moves_number(node)
-	k=0
-	while node:
-		node=node[0]
-		if (node.get_move()[0]!=None) and (node.get_move()[1]!=None):
-			k+=1
-		else:
-			break
-	return k
 
 def get_node(root,number=0):
 	if number==0:return root
@@ -2136,3 +2229,309 @@ def get_node(root,number=0):
 		node=node[0]
 		k+=1
 	return node
+
+def node_set(node, property_name, value):
+	if type(value)==type(u"abc"):
+		value=value.encode("utf-8")
+	if property_name.lower() in ("w","b"):
+		node.set_move(property_name.encode("utf-8"),value)
+	elif  property_name.upper() in ("TBM","TWM", "IBM", "IWM"):
+		new_list=[]
+		for ij in value:
+			new_list.append(ij2sgf(ij).encode("utf-8"))
+		if type(property_name)==type(u"abc"):
+			property_name=property_name.encode("utf-8")
+		node.set_raw_list(property_name,new_list)
+	else:
+		if type(property_name)==type(u"abc"):
+			property_name=property_name.encode("utf-8")
+		node.set(property_name,value)
+
+
+def node_get(node, property_name):
+	if type(property_name)==type(u"abc"):
+		property_name=property_name.encode("utf-8")
+	value=node.get(property_name)
+	if type(value)==type(str("abc")):
+		value=value.decode("utf-8")
+	return value
+
+def node_has(node, property_name):
+	if type(property_name)==type(u"abc"):
+		property_name=property_name.encode("utf-8")
+	return node.has_property(property_name)
+
+def get_available():
+	from leela_analysis import Leela
+	from gnugo_analysis import GnuGo
+	from ray_analysis import Ray
+	from aq_analysis import AQ
+	from leela_zero_analysis import LeelaZero
+	from pachi_analysis import Pachi
+	from phoenixgo_analysis import PhoenixGo
+
+	bots=[]
+	for bot in [Leela, AQ, Ray, GnuGo, LeelaZero, Pachi, PhoenixGo]:
+		profiles=get_bot_profiles(bot["name"])
+		for profile in profiles:
+			bot2=dict(bot)
+			bots.append(bot2)
+			for key, value in profile.items():
+				bot2[key]=value
+	return bots
+
+def get_gtp_bots():
+	from gtp_bot import GtpBot
+
+	bots=[]
+	for bot in [GtpBot]:
+		profiles=get_bot_profiles(bot["name"])
+		for profile in profiles:
+			bot2=dict(bot)
+			bots.append(bot2)
+			for key, value in profile.items():
+				bot2[key]=value
+	return bots
+
+def get_bot_profiles(bot="",withcommand=True):
+	sections=grp_config.get_sections()
+	if bot!="":
+		bots=[bot]
+	else:
+		bots=["Leela","GnuGo","Ray","AQ","LeelaZero","Pachi","PhoenixGo"]
+	profiles=[]
+	for section in sections:
+		for bot in bots:
+			if bot+"-" in section:
+				command=grp_config.get(section,"command")
+				if (not command) and (withcommand==True):
+					continue
+				data={"bot":bot,"command":"","parameters":"","timepermove":"","variations":"4","deepness":"4"}
+				for option in grp_config.get_options(section):
+					value=grp_config.get(section,option)
+					data[option]=value
+				profiles.append(data)
+
+	return profiles
+
+class BotProfiles(Frame):
+	def __init__(self,parent,bot):
+		Frame.__init__(self,parent)
+		self.parent=parent
+		self.bot=bot
+		self.profiles=get_bot_profiles(bot,False)
+		profiles_frame=self
+
+		self.listbox = Listbox(profiles_frame)
+		self.listbox.grid(column=10,row=10,rowspan=10)
+		self.update_listbox()
+
+		row=10
+		Label(profiles_frame,text=_("Profile")).grid(row=row,column=11,sticky=W)
+		self.profile = StringVar()
+		Entry(profiles_frame, textvariable=self.profile, width=30).grid(row=row,column=12)
+
+		row+=1
+		Label(profiles_frame,text=_("Command")).grid(row=row,column=11,sticky=W)
+		self.command = StringVar()
+		Entry(profiles_frame, textvariable=self.command, width=30).grid(row=row,column=12)
+
+		row+=1
+		Label(profiles_frame,text=_("Parameters")).grid(row=row,column=11,sticky=W)
+		self.parameters = StringVar()
+		Entry(profiles_frame, textvariable=self.parameters, width=30).grid(row=row,column=12)
+
+		row+=10
+		buttons_frame=Frame(profiles_frame)
+		buttons_frame.grid(row=row,column=10,sticky=W,columnspan=3)
+		Button(buttons_frame, text=_("Add profile"),command=self.add_profile).grid(row=row,column=1,sticky=W)
+		Button(buttons_frame, text=_("Modify profile"),command=self.modify_profile).grid(row=row,column=2,sticky=W)
+		Button(buttons_frame, text=_("Delete profile"),command=self.delete_profile).grid(row=row,column=3,sticky=W)
+		Button(buttons_frame, text=_("Test"),command=lambda: self.parent.parent.test(self.bot_gtp,self.command,self.parameters)).grid(row=row,column=4,sticky=W)
+		self.listbox.bind("<Button-1>", lambda e: self.after(100,self.change_selection))
+
+		self.index=-1
+
+	def clear_selection(self):
+		self.index=-1
+		self.profile.set("")
+		self.command.set("")
+		self.parameters.set("")
+
+	def change_selection(self):
+		try:
+			index=int(self.listbox.curselection()[0])
+			self.index=index
+			log("Profile",index,"selected")
+		except:
+			log("No selection")
+			self.clear_selection()
+			return
+		data=self.profiles[index]
+		self.profile.set(data["profile"])
+		self.command.set(data["command"])
+		self.parameters.set(data["parameters"])
+
+	def empty_profiles(self):
+		profiles=self.profiles
+		sections=grp_config.get_sections()
+		for bot in [profile["bot"] for profile in profiles]:
+			for section in sections:
+				if bot+"-" in section:
+					grp_config.remove_section(section)
+		self.update_listbox()
+
+	def create_profiles(self):
+		profiles=self.profiles
+		p=0
+		for profile in profiles:
+			bot=profile["bot"]
+			for key,value in profile.items():
+				if key!="bot":
+					grp_config.add_entry(bot+"-"+str(p),key,value)
+			p+=1
+		self.update_listbox()
+
+	def add_profile(self):
+		profiles=self.profiles
+		if self.profile.get()=="":
+			return
+		data={"bot":self.bot}
+		data["profile"]=self.profile.get()
+		data["command"]=self.command.get()
+		data["parameters"]=self.parameters.get()
+		self.empty_profiles()
+		profiles.append(data)
+		self.create_profiles()
+		self.clear_selection()
+
+
+	def modify_profile(self):
+		profiles=self.profiles
+		if self.profile.get()=="":
+			return
+
+		if self.index<0:
+			log("No selection")
+			return
+		index=self.index
+
+		profiles[index]["profile"]=self.profile.get()
+		profiles[index]["command"]=self.command.get()
+		profiles[index]["parameters"]=self.parameters.get()
+
+		self.empty_profiles()
+		self.create_profiles()
+		self.clear_selection()
+
+	def delete_profile(self):
+		profiles=self.profiles
+
+		if self.index<0:
+			log("No selection")
+			return
+		index=self.index
+
+		self.empty_profiles()
+		del profiles[index]
+		self.create_profiles()
+		self.clear_selection()
+
+
+	def update_listbox(self):
+		profiles=self.profiles
+		self.listbox.delete(0, END)
+		for item in [profile["bot"]+" - "+profile["profile"] for profile in profiles]:
+			self.listbox.insert(END, item)
+
+from sys import argv
+import getopt
+def main(bot):
+	if len(argv)==1:
+		temp_root = Tk()
+		filename = open_sgf_file(parent=temp_root)
+		temp_root.destroy()
+		log(filename)
+		log("gamename:",filename[:-4])
+		if not filename:
+			sys.exit()
+		log("filename:",filename)
+
+		top = Application()
+
+
+		bots=[]
+		profiles=get_bot_profiles(bot["name"])
+		for profile in profiles:
+			bot2=dict(bot)
+			for key, value in profile.items():
+				bot2[key]=value
+			bots.append(bot2)
+		if len(bots)>0:
+			popup=RangeSelector(top,filename,bots=bots)
+			top.add_popup(popup)
+			top.mainloop()
+		else:
+			log("Not profiles available for "+bot["name"]+" in \"config.ini\"")
+	else:
+		existing_profiles=[p["profile"] for p in get_bot_profiles(bot["name"])]
+		if not existing_profiles:
+			log("Not profiles available for "+bot["name"]+" in config.ini")
+			sys.exit()
+		try:
+			parameters=getopt.getopt(argv[1:], '', ['no-gui','range=', 'color=', 'komi=',"variation=", "profile="])
+		except Exception, e:
+			show_error(unicode(e)+"\n"+usage)
+			sys.exit()
+		if not parameters[1]:
+			show_error("SGF file missing\n"+usage)
+			sys.exit()
+
+
+		app=None
+		batch=[]
+		for filename in parameters[1]:
+			move_selection,intervals,variation,komi,nogui,profile=parse_command_line(filename,parameters[0])
+			if not profile:
+				log("No profile indicated, the profile \""+existing_profiles[0]+"\" will be used")
+				profile=existing_profiles[0]
+			if profile not in existing_profiles:
+				log("Unknown profile \""+profile+"\" for",bot["name"])
+				log("The profile \""+profile+"\" is not defined in \"config.ini\"")
+				log("The existing profiles are"," ".join(['"'+p+'"' for p in existing_profiles]))
+				sys.exit()
+			profile={p["profile"]:p for p in get_bot_profiles(bot["name"])}[profile]
+
+			if isinstance(filename, str):
+				filename = unicode(filename, 'utf-8')
+
+			filename2=".".join(filename.split(".")[:-1])+".rsgf"
+			if nogui:
+				popup=bot["runanalysis"]("no-gui",[filename,filename2],move_selection,intervals,variation-1,komi,profile)
+				popup.terminate_bot()
+			else:
+				if not app:
+					app = Application()
+				one_analysis=[bot["runanalysis"],[filename,filename2],move_selection,intervals,variation-1,komi,profile]
+				batch.append(one_analysis)
+
+		if not nogui:
+			app.after(100,lambda: batch_analysis(app,batch))
+			app.mainloop()
+
+try:
+	from playsound import playsound
+	mp3=grp_config.get("General","StoneSound")
+	if mp3:
+		log("Reading",mp3)
+		with open(mp3, mode='rb') as sound_file: #pre loading the sound file in memory
+			fileContent = sound_file.read()
+
+	def play_stone_sound():
+		if mp3:
+			threading.Thread(target=playsound, args=(mp3,)).start()
+
+except Exception,e:
+	log("Stone sound disabled:")
+	log(e)
+	play_stone_sound=lambda: None

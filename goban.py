@@ -1,16 +1,78 @@
+# -*- coding: utf-8 -*-
+from __future__ import unicode_literals
+
 from functools import partial
-from copy import deepcopy as copy
-
-space=10
-
 fuzzy=0.0
-
-
-from random import random,seed,choice
-
-from Tkinter import Canvas
-from toolbox import log
+from random import random,choice
+from Tkinter import *
+from Tkconstants import *
 from math import sin, pi
+
+class Intersection():
+	def __init__(self,i,j,dim,space,anchor_x, anchor_y, offset, canvas):
+		self.i=i
+		self.j=j
+		self.dim=dim
+		self.space=space
+		self.anchor_x=anchor_x
+		self.anchor_y=anchor_y
+		self.offset=offset
+		self.canvas=canvas
+		self.hidden=True
+		
+		x1=i+0.4
+		y1=j
+		x2=i-0.4
+		y2=j
+		self.s1=self.draw_line(x1,y1,x2,y2,color="black")
+		
+		x1=i
+		y1=j+0.4
+		x2=i
+		y2=j-0.4
+		self.s2=self.draw_line(x1,y1,x2,y2,color="black")
+
+	def shine(self,remaining=100):
+		if remaining==100:
+			self.show()
+		s=abs(sin((25-remaining)*(8*pi/100.))*5.)
+		self.canvas.itemconfig(self.s1,width=int(s*self.space/22))
+		self.canvas.itemconfig(self.s2,width=int(s*self.space/22))
+		remaining-=1
+		if remaining==0:
+			self.hide()
+		else:
+			self.canvas.after(30,lambda: self.shine(remaining))
+
+	def show(self):
+		if self.hidden:
+			self.canvas.move(self.s1,self.offset,self.offset)
+			self.canvas.move(self.s2,self.offset,self.offset)
+			self.hidden=False
+	
+	def hide(self):
+		if not self.hidden:
+			self.canvas.move(self.s1,-self.offset,-self.offset)
+			self.canvas.move(self.s2,-self.offset,-self.offset)
+			self.hidden=True
+
+	def draw_line(self,i1,j1,i2,j2,color="black",width=1):
+		x1,y1=self.ij2xy(i1,j1)
+		x2,y2=self.ij2xy(i2,j2)
+		
+		if self.hidden:
+			x1-=self.offset
+			y1-=self.offset
+			x2-=self.offset
+			y2-=self.offset
+		return self.canvas.create_line(x1,y1,x2,y2,fill=color,width=width)
+
+	def ij2xy(self,i,j):
+		space=self.space
+		dim=self.dim
+		y=(0.5+0.5+dim-i)*space+self.anchor_y
+		x=(0.5+0.5+1.+j)*space+self.anchor_x
+		return x,y
 
 class Stone():
 	def __init__(self,color,i,j,dim,space,anchor_x, anchor_y, offset, canvas, mesh, style):
@@ -107,19 +169,23 @@ class Stone():
 
 
 class Goban(Canvas):
-	def __init__(self,dim,**kwargs):
-		
+	def __init__(self,dim,size,**kwargs):
+		self.space=size/(dim+1+1+1)
 		self.dim=dim
-		self.space=space
 		self.wood_color=(214,174,114) #same as gogui
+		if "width" not in kwargs:
+			kwargs["width"]=size
+		if "height" not in kwargs:
+			kwargs["height"]=size
 		Canvas.__init__(self,**kwargs)
 		
 		self.anchor_x=0
 		self.anchor_y=0
 		
 		self.define_goban_style()
-		self.create_goban()
+		#self.create_goban()
 		self.temporary_shapes=[]
+		self.freeze=False
 		
 	def define_goban_style(self):
 		f=fuzzy
@@ -135,8 +201,8 @@ class Goban(Canvas):
 		dim=self.dim
 		r,g,b=self.wood_color
 		k0=0
-		k1=random()*0.05
-		t=15
+		k1=random()*0.1 #width of vertical lines in wood texture
+		t=7 #color shades 
 		while k0<1:
 			#tt=choice(range(-t,t+1))
 			tt=2*random()*t-t
@@ -172,7 +238,6 @@ class Goban(Canvas):
 	
 	def create_goban(self):
 		space=self.space
-		
 		if space<4:
 			return
 		
@@ -226,6 +291,7 @@ class Goban(Canvas):
 		#creating the stones
 		self.black_stones=[[None for d in range(dim)] for dd in range(dim)]
 		self.white_stones=[[None for d in range(dim)] for dd in range(dim)]
+		self.intersections=[[None for d in range(dim)] for dd in range(dim)]
 		for i in range(dim):
 			for j in range(dim):
 				style=self.black_stones_style[i][j]
@@ -234,7 +300,8 @@ class Goban(Canvas):
 				style=self.white_stones_style[i][j]
 				self.white_stones[i][j]=Stone("white",i,j,dim,self.space,self.anchor_x, self.anchor_y, offset, self, self.mesh,style)
 				
-	
+				self.intersections[i][j]=Intersection(i,j,dim,self.space,self.anchor_x, self.anchor_y, offset, self)
+				
 	def ij2xy(self,i,j):
 		space=self.space
 		dim=self.dim
@@ -272,10 +339,19 @@ class Goban(Canvas):
 		for item in self.find_all():
 			self.delete(item)
 		self.create_goban()
-		self.display(self.grid,self.markup)
+		
+		try:
+			self.grid
+			self.markup
+		except:
+			self.grid=[[0 for row in range(self.dim)] for col in range(self.dim)]
+			self.markup=[["" for row in range(self.dim)] for col in range(self.dim)]
+		
+		self.display(self.grid,self.markup,"keep")
 
 	def display(self,grid,markup,freeze=False):
-		
+		if freeze!="keep":
+			self.freeze=freeze
 		self.grid=grid
 		self.markup=markup
 		space=self.space
@@ -290,7 +366,9 @@ class Goban(Canvas):
 		
 
 		
-		if freeze:
+		if self.freeze:
+			if freeze!="keep":
+				self.config(cursor="watch")
 			self.temporary_shapes.append(self.draw_rectangle(-0.1-.5  ,  -0.1-.5  ,   -.5,    dim-1+.5+0.1,"red"))
 			self.temporary_shapes.append(self.draw_rectangle(dim-1+.5+0.1  ,  -0.1-.5  ,   dim-1+.5,    dim-1+.5+0.1,"red"))
 			self.temporary_shapes.append(self.draw_rectangle(-0.1-.5  ,  -0.1-.5  ,   dim-1+.5 ,  -.5,"red"))
@@ -304,7 +382,9 @@ class Goban(Canvas):
 				self.temporary_shapes.append(self.create_text(x,y, text=str(i+1),font=self.font,fill="red"))
 				x,y=self.ij2xy(i,dim+0.1)
 				self.temporary_shapes.append(self.create_text(x,y, text=str(i+1),font=self.font,fill="red"))
-			
+		else:
+			if freeze!="keep":
+				self.config(cursor="cross")
 		
 		
 		r,g,b=self.wood_color
@@ -334,7 +414,6 @@ class Goban(Canvas):
 					if grid[i][j]==0:
 						self.temporary_shapes.append(self.draw_point(u,v,0.6,color=bg,outline=bg))
 					if markup[i][j]==0:
-						k=0.8
 						self.temporary_shapes.append(self.draw_point(u,v,.4,color="",outline=markup_color,width=space/22.))
 
 					elif markup[i][j]==-1:
@@ -351,10 +430,18 @@ class Goban(Canvas):
 						x,y=self.ij2xy(u,v)
 						self.temporary_shapes.append(self.create_text(x,y, text=str(markup[i][j]),font=self.font,fill=markup_color))
 						
-				elif markup[i][j]=="":
-					#do nothing
-					pass
-				else:
+				elif type(markup[i][j])==type("abc"):
+					
+					if markup[i][j]!="":
+						number_color="black"
+						if grid[i][j]==1:
+							number_color="white"
+						elif grid[i][j]==0:
+							self.temporary_shapes.append(self.draw_point(u,v,0.8,color=bg,outline=""))
+						
+						x,y=self.ij2xy(u,v)
+						self.temporary_shapes.append(self.create_text(x,y, text=markup[i][j],font=self.font,fill=number_color))
+				elif type(markup[i][j])==type([]):
 					sequence=markup[i][j]
 					markup_color=sequence[0][4]
 					letter_color=sequence[0][5]
@@ -364,6 +451,24 @@ class Goban(Canvas):
 					local_area=self.draw_point(u,v,1,color="",outline="")
 					self.tag_bind(local_area, "<Enter>", partial(show_variation,goban=self,grid=grid,markup=markup,i=i,j=j))
 					self.temporary_shapes.append(local_area)
+				
+				elif type(markup[i][j])==type(0.1): #heat map values
+					value=markup[i][j]
+					max_value=max([max([vv if type(vv)==type(0.1) else 0 for vv in ww]) for ww in markup])
+					print value, "/", max_value, "=>", 
+					value=value*1./max_value
+					print value
+					r1, g1, b1=self.wood_color
+					r2, g2, b2=255, 0, 0
+					r3, g3, b3=int(r1+(r2-r1)*value), int(g1+(g2-g1)*value), int(b1+(b2-b1)*value)
+					print r1, g1, b1
+					print r2, g2, b2
+					print r3, g3, b3
+					print "value", markup[i][j], value	
+					color='#%02x%02x%02x' % (r3, g3, b3)
+					print "value", markup[i][j], value, color
+					self.temporary_shapes.append(self.draw_point(i,j,0.8,color=bg,outline=bg))
+					self.temporary_shapes.append(self.draw_point(i,j,.7,color, outline=""))
 		
 
 		
